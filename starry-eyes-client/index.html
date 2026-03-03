@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>StarryEyes</title>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { width: 100%; height: 100%; overflow: hidden; background: #050510; }
+      #pixi-container {
+        position: absolute;
+        top: 0; left: 0;
+        width: 100%; height: 100%;
+        z-index: 0;
+      }
+      #hud-root {
+        position: absolute;
+        top: 0; left: 0;
+        width: 100%; height: 100%;
+        z-index: 1;
+        pointer-events: none;
+      }
+      #hud-root * {
+        pointer-events: auto;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="pixi-container"></div>
+    <div id="hud-root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
