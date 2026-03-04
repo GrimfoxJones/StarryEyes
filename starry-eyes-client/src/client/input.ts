@@ -1,6 +1,6 @@
 import type { Camera } from './camera.ts';
 import type { StarSystem } from '../simulation/system.ts';
-import { vec2Normalize, vec2Sub } from '../simulation/types.ts';
+import { BODY_CLICK_THRESHOLD_PX } from '../simulation/constants.ts';
 
 export function setupInput(
   canvas: HTMLCanvasElement,
@@ -32,16 +32,46 @@ export function setupInput(
     camera.endPan();
   });
 
-  // Right-click → set heading toward click point
+  // Right-click → set destination
   canvas.addEventListener('contextmenu', (e) => {
     e.preventDefault();
     const ship = system.ships[0];
     if (!ship) return;
 
-    const simPos = camera.screenToSim(e.offsetX, e.offsetY);
-    const dir = vec2Normalize(vec2Sub(simPos, ship.position));
+    const clickX = e.offsetX;
+    const clickY = e.offsetY;
 
-    system.command({ type: 'SET_HEADING', shipId: 'player', heading: dir });
+    // Check each body's screen distance from click
+    const snapshot = system.snapshot();
+    let nearestBodyId: string | null = null;
+    let nearestDist = Infinity;
+
+    for (const body of snapshot.bodies) {
+      if (body.type === 'star') continue; // can't fly to the star
+      const screenPos = camera.simToScreen(body.position.x, body.position.y);
+      const dx = screenPos.x - clickX;
+      const dy = screenPos.y - clickY;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < nearestDist) {
+        nearestDist = dist;
+        nearestBodyId = body.id;
+      }
+    }
+
+    if (nearestBodyId && nearestDist < BODY_CLICK_THRESHOLD_PX) {
+      system.command({
+        type: 'SET_DESTINATION',
+        shipId: 'player',
+        destination: { type: 'body', bodyId: nearestBodyId },
+      });
+    } else {
+      const simPos = camera.screenToSim(clickX, clickY);
+      system.command({
+        type: 'SET_DESTINATION',
+        shipId: 'player',
+        destination: { type: 'point', position: simPos },
+      });
+    }
   });
 
   // Double-click → focus on nearest body
@@ -72,17 +102,10 @@ export function setupInput(
 
   // Keyboard controls
   window.addEventListener('keydown', (e) => {
-    const ship = system.ships[0];
-    if (!ship) return;
-
-    // 0-9 for thrust
-    if (e.key >= '0' && e.key <= '9') {
-      const level = parseInt(e.key) / 10;
-      system.command({ type: 'SET_THRUST', shipId: 'player', level });
-      return;
-    }
-
     switch (e.key) {
+      case 'Escape':
+        system.command({ type: 'CANCEL_ROUTE', shipId: 'player' });
+        break;
       case ' ':
         e.preventDefault();
         if (system.paused) {

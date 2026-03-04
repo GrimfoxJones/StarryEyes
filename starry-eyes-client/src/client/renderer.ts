@@ -61,18 +61,6 @@ export class GameRenderer {
 
   private drawStarfield(): void {
     this.starfieldGraphics.clear();
-    // Static random dots
-    const rng = mulberry32(12345);
-    const w = this.app.screen.width;
-    const h = this.app.screen.height;
-    for (let i = 0; i < 200; i++) {
-      const x = rng() * w;
-      const y = rng() * h;
-      const brightness = 0.2 + rng() * 0.5;
-      const size = 0.5 + rng() * 1.5;
-      this.starfieldGraphics.circle(x, y, size);
-      this.starfieldGraphics.fill({ color: 0xffffff, alpha: brightness });
-    }
   }
 
   render(snapshot: SystemSnapshot): void {
@@ -199,9 +187,9 @@ export class GameRenderer {
       this.shipGraphics.fill({ color: 0x00ffcc, alpha: 0.9 });
 
       // Thrust flame
-      if (ship.isThrusting) {
+      if (ship.mode === 'transit') {
         const flameAngle = headingAngle + Math.PI; // opposite to heading
-        const flameLen = size * 0.8 * (0.5 + 0.5 * ship.thrustLevel);
+        const flameLen = size * 0.8;
         const flameTipX = screen.x + Math.cos(flameAngle) * flameLen;
         const flameTipY = screen.y - Math.sin(flameAngle) * flameLen;
         const flameSpread = Math.PI * 0.15;
@@ -220,12 +208,3 @@ export class GameRenderer {
   }
 }
 
-function mulberry32(seed: number): () => number {
-  let s = seed;
-  return () => {
-    s = (s + 0x6D2B79F5) | 0;
-    let t = Math.imul(s ^ (s >>> 15), 1 | s);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}

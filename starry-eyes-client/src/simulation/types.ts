@@ -87,20 +87,42 @@ export interface CelestialBody {
   readonly color: number;      // hex color for rendering
 }
 
+// ── Nav Computer Types ──────────────────────────────────────────────
+
+export type ShipMode = 'idle' | 'drift' | 'transit' | 'orbit';
+
+export interface Route {
+  readonly startPos: Vec2;           // P0
+  readonly controlPoint: Vec2;       // P1 (Bézier control point)
+  readonly interceptPos: Vec2;       // P2 (destination)
+  readonly startTime: number;
+  readonly initialSpeed: number;     // ship speed at route start (0 if from rest)
+  readonly arcLength: number;        // total distance along curve
+  readonly totalTime: number;        // transit time for arcLength (asymmetric if initialSpeed > 0)
+  readonly acceleration: number;
+  readonly targetBodyId: string | null;
+  readonly arcTable: readonly { readonly t: number; readonly dist: number }[];
+}
+
+export interface Destination {
+  readonly type: 'body' | 'point';
+  readonly bodyId?: string;
+  readonly position?: Vec2;
+}
+
 // ── Ship State ──────────────────────────────────────────────────────
 
 export interface ShipState {
   readonly id: string;
   position: Vec2;
   velocity: Vec2;
-  heading: Vec2;               // unit vector
-  thrustLevel: number;         // 0.0–1.0
   readonly maxAcceleration: number; // m/s²
   fuel: number;                // kg remaining
   readonly fuelConsumptionRate: number; // kg/s at full thrust
-  isThrusting: boolean;
-  coastOrbit: OrbitalElements | null;
-  parentBodyId: string;
+  mode: ShipMode;
+  route: Route | null;
+  orbitBodyId: string | null;
+  orbitAngle: number;
 }
 
 // ── Snapshots (serialization-friendly) ──────────────────────────────
@@ -120,12 +142,14 @@ export interface ShipSnapshot {
   readonly position: Vec2;
   readonly velocity: Vec2;
   readonly heading: Vec2;
-  readonly thrustLevel: number;
-  readonly isThrusting: boolean;
+  readonly mode: ShipMode;
   readonly fuel: number;
   readonly maxFuel: number;
   readonly speed: number;
-  readonly parentBodyId: string;
+  readonly destinationName: string | null;
+  readonly eta: number | null;
+  readonly routeLine: readonly Vec2[] | null;
+  readonly isDecelerating: boolean;
 }
 
 export interface SystemSnapshot {
@@ -139,8 +163,8 @@ export interface SystemSnapshot {
 // ── Player Commands ─────────────────────────────────────────────────
 
 export type PlayerCommand =
-  | { readonly type: 'SET_HEADING'; readonly shipId: string; readonly heading: Vec2 }
-  | { readonly type: 'SET_THRUST'; readonly shipId: string; readonly level: number }
+  | { readonly type: 'SET_DESTINATION'; readonly shipId: string; readonly destination: Destination }
+  | { readonly type: 'CANCEL_ROUTE'; readonly shipId: string }
   | { readonly type: 'SET_TIME_COMPRESSION'; readonly multiplier: number }
   | { readonly type: 'PAUSE' }
   | { readonly type: 'RESUME' };

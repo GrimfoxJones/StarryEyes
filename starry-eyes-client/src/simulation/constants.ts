@@ -27,5 +27,10 @@ export const SHIP_MAX_ACCELERATION = 9.81; // m/s² (~1g)
 export const SHIP_FUEL_CAPACITY = 100000;  // kg
 export const SHIP_FUEL_CONSUMPTION_RATE = 0.02; // kg/s at full thrust
 
+// ── Nav computer ─────────────────────────────────────────────────────
+export const ORBIT_VISUAL_RADIUS = 5e7;   // 50k km visual orbit distance
+export const ORBIT_VISUAL_SPEED = 0.5;    // rad/s visual orbit speed
+export const BODY_CLICK_THRESHOLD_PX = 30; // pixels for body click detection
+
 // ── Body visual radii (rendering, not physical) ─────────────────────
 export const MIN_BODY_PIXEL_RADIUS = 3;

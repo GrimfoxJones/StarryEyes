@@ -1,6 +1,6 @@
 # StarryEyes — Ship Subsystem Architecture
 
-**Version:** 0.1 — Design Specification
+**Version:** 0.2 — Design Specification (Updated for Nav Computer model)
 **Author:** Grimfox Games
 **Date:** March 2026
 
@@ -27,6 +27,24 @@ But the automation is transparent. Every decision the control system makes is vi
 5. **Depth through structure, not complexity.** Individual values and relationships are simple. A fusion reactor has a power output, a fuel consumption rate, and a heat generation rate. The depth comes from many simple systems interconnected — not from any single system being complicated.
 
 6. **Ship-agnostic rendering.** The UI does not know what a FLARE drive is. It knows how to render a subsystem tree with values and metadata. A new ship type requires zero UI code — only simulation definitions.
+
+### Navigation Model — Captain, Not Pilot
+
+The player does not fly the ship. The player commands the ship. Right-clicking a destination on the map tells the nav computer where to go. The nav computer computes an intercept route (accounting for the target's orbital motion), calculates fuel cost and ETA, and flies the ship there automatically — accelerating for the first half, flipping at the midpoint, and decelerating to arrive at near-zero velocity.
+
+The player never sets heading or throttle directly. They set a destination and the ship handles execution. This elevates the player's role from pilot to captain — the interesting decisions are *where* to go and *when*, not how to aim. See the companion document **StarryEyes — Navigation Refactor** for the full route computation model.
+
+### When Subsystems Matter — Situational Depth
+
+During routine transits, subsystems run on autopilot and the player can ignore them entirely. The depth comes alive in specific situations:
+
+- **Pre-departure planning.** Before committing to a route, an experienced player might adjust reaction mass ratio to optimize the fuel/time/signature tradeoff for this particular trip. Running lean through a dangerous sector. Running rich when speed matters more than fuel.
+- **Encounters.** A contact appears on sensors during transit. Suddenly the sensor panel matters — what can you see, what can they see, should you go passive? The drive tuning matters — can you dim your signature? Thermal management matters — how hot are you running?
+- **Damage and degradation.** A subsystem takes damage or overheats. The automation adjusts, but maybe not optimally for your situation. Manual overrides become relevant when the ship's defaults don't match your priorities.
+- **Resource scarcity.** Running low on fuel changes the delta-v calculus. Running low on reactor fuel changes the power budget. Scarcity makes every subsystem value suddenly important.
+- **Exploration.** Operating at the margins — pushing into deep space, running dark to avoid detection, coasting through an unfamiliar sector on minimal power. The subsystems become your survival dashboard.
+
+A new player never needs to open a sub-menu. An experienced player opens them when the situation demands it. The depth is always there; it just waits until it's relevant.
 
 ---
 
@@ -140,18 +158,30 @@ The **Darter-class Light Freighter** is the starter vessel. Its tree is intentio
 ```
 ship: "Darter-class Light Freighter"
 │
-├── navigation/
-│   ├── position: [x, y] m                          (simulated)
-│   ├── velocity: [vx, vy] m/s                      (simulated)
-│   ├── speed: 0 m/s                                (simulated, derived from velocity)
-│   ├── heading: 0°                                  (player)
-│   ├── course: 0°                                   (simulated, actual direction of travel)
-│   ├── delta_v_remaining: 0 m/s                     (simulated, derived)
-│   └── fuel_range_estimate: 0 km                    (simulated, derived)
+├── navigation/                                       [Nav Computer]
+│   ├── status: IDLE                                 (simulated: IDLE | PLOTTING | IN_TRANSIT | IN_ORBIT | DOCKED)
+│   ├── current_position: [x, y] m                   (simulated)
+│   ├── current_velocity: [vx, vy] m/s               (simulated, derived from route at current time)
+│   ├── speed: 0 m/s                                 (simulated, derived from velocity)
+│   ├── destination: —                                (player, set via map right-click)
+│   ├── destination_eta: —                            (simulated, derived from route)
+│   ├── route_fuel_cost: 0 kg                         (simulated, total fuel for current route)
+│   ├── delta_v_remaining: 0 m/s                      (simulated, derived from propellant + mass)
+│   ├── trips_remaining_estimate: 0                   (simulated, rough count of average-length trips fuel allows)
+│   │
+│   └── [sub-menu] route_details/
+│       ├── departure_body: —                         (simulated)
+│       ├── arrival_body: —                           (simulated)
+│       ├── transit_distance: 0 km                    (simulated)
+│       ├── transit_time: 0 s                         (simulated)
+│       ├── time_elapsed: 0 s                         (simulated)
+│       ├── acceleration_phase: —                     (simulated: ACCELERATING | COASTING | DECELERATING | NONE)
+│       ├── flip_point_eta: —                         (simulated, time until midpoint flip)
+│       └── arrival_velocity: 0 m/s                   (simulated, should approach 0 on arrival)
 │
 ├── drive/                                            [FLARE Drive, Model: Kessler-Lin F2]
-│   ├── status: OFFLINE                              (simulated)
-│   ├── throttle: 0.0                                (player, 0.0–1.0)
+│   ├── status: OFFLINE                              (simulated: OFFLINE | STANDBY | ACTIVE | OVERHEAT)
+│   ├── throttle: 0.0                                (controlled, nav computer manages during transit)
 │   ├── thrust_output: 0 kN                          (simulated)
 │   ├── max_thrust: 180 kN                           (simulated, varies with reaction_mass_ratio)
 │   ├── current_acceleration: 0 m/s²                 (simulated, thrust / total_mass)
@@ -166,6 +196,7 @@ ship: "Darter-class Light Freighter"
 │       │   Controls the ratio of propellant to fusion product in exhaust.
 │       │   Lower = more efficient (higher Isp, less thrust, dimmer signature)
 │       │   Higher = more thrust (lower Isp, burns fuel faster, brighter signature)
+│       │   Set BEFORE departure to affect route fuel cost, transit time, and drive signature.
 │       ├── ignition_sequence: [command]              (player, triggers startup)
 │       ├── shutdown_sequence: [command]              (player, triggers shutdown)
 │       └── magnetic_nozzle_ratio: 0.85              (controlled → overridable)
@@ -394,7 +425,12 @@ DRIVE
   ├── requires: reactor power_output ≥ drive power_draw
   │   (drive won't ignite if reactor can't supply it)
   │
+  ├── throttle managed by NAV COMPUTER during transit
+  │   (nav computer sets throttle to execute route; player adjusts indirectly
+  │    via reaction_mass_ratio which affects thrust/efficiency/signature tradeoff)
+  │
   ├──→ thrust_output ──→ NAVIGATION acceleration (thrust / total_mass)
+  │                      (determines transit times and fuel costs)
   │
   ├──→ fuel_flow_rate ──→ PROPELLANT tank depletion
   │
@@ -429,7 +465,7 @@ PROPELLANT
   │
   ├── receives: consumption from DRIVE
   │
-  ├──→ remaining propellant ──→ NAVIGATION delta_v_remaining
+  ├──→ remaining propellant ──→ NAVIGATION delta_v_remaining + trips_remaining_estimate
   │
   └──→ remaining propellant ──→ STRUCTURAL mass_propellant ──→ total_mass
   │                                                            ──→ acceleration
@@ -488,7 +524,7 @@ When a player issues a "start reactor" command, the following sequence plays out
 
 5. **Thermal systems respond.** Radiators (if deployed) begin showing rejection rate. Surface temperature rises. Heat loop establishes equilibrium.
 
-6. **Drive available.** Once reactor output is sufficient, drive status changes from OFFLINE to STANDBY. Player can now set throttle.
+6. **Drive available.** Once reactor output is sufficient, drive status changes from OFFLINE to STANDBY. The nav computer can now execute transit routes.
 
 Total sequence: maybe 3–5 real seconds. Every number mentioned above is visible in the subsystem panels and updates smoothly. The schematic diagram animates — flow lines appear, components light up, temperature colors shift from cool blue to warm amber.
 
@@ -500,59 +536,39 @@ None of this requires player input beyond the initial command. All of it is visi
 
 ## UI Layout
 
+The map is full-viewport. Ship status is conveyed through semi-transparent floating HUD elements in the corners. The left panel (SYS, CREW, OPS, DOCK tabs) is collapsed by default and expands as a semi-transparent overlay. See the **UI Specification** document for full layout, interaction, and styling details.
+
 ```
-┌─────────────────────────────────────────────────────────────┐
-│  [Game Clock]  [Time Scale]  [Ship Name / Class]            │
-├──────────────┬──────────────────────────┬───────────────────┤
-│              │                          │                   │
-│  LEFT PANEL  │      CENTER PANEL        │   RIGHT PANEL     │
-│  Your Ship   │      The Map             │   Contextual      │
-│              │                          │                   │
-│  ┌─────────┐ │   PixiJS Canvas          │  (empty when      │
-│  │ Flight  │ │                          │   nothing         │
-│  │ Summary │ │   Stars, planets,        │   selected)       │
-│  ├─────────┤ │   orbits, ships,         │                   │
-│  │ Drive   │ │   trajectories,          │  Click a planet → │
-│  ├─────────┤ │   trails                 │  orbital data,    │
-│  │ Reactor │ │                          │  stations,        │
-│  ├─────────┤ │                          │  market prices    │
-│  │ Thermal │ │                          │                   │
-│  ├─────────┤ │                          │  Click a ship →   │
-│  │ Sensors │ │                          │  sensor-resolved  │
-│  ├─────────┤ │                          │  info based on    │
-│  │ Propel. │ │                          │  detection tier   │
-│  ├─────────┤ │                          │                   │
-│  │ Cargo   │ │                          │  Click own        │
-│  ├─────────┤ │                          │  trajectory →     │
-│  │ Comms   │ │                          │  intercept data,  │
-│  ├─────────┤ │                          │  ETAs, closest    │
-│  │ Struct. │ │                          │  approaches       │
-│  └─────────┘ │                          │                   │
-│              │                          │                   │
-│  Each section│                          │                   │
-│  collapses/  │                          │                   │
-│  expands.    │                          │                   │
-│  Click into  │                          │                   │
-│  sub-menus.  │                          │                   │
-│              │                          │                   │
-├──────────────┴──────────────────────────┴───────────────────┤
-│  [Heading: 045°] [Thrust: 80%] [Vel: 12.4 km/s] [Fuel: 72%]│
-│  ─── Bottom bar: always-visible flight essentials ──────────│
-└─────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│ ┌───────────┐                        ┌─────────────────────┐ │
+│ │ GAME TIME │                        │ MODE / VEL / DEST   │ │
+│ │ WARP      │                        │ ETA / PHASE         │ │
+│ └───────────┘                        └─────────────────────┘ │
+│                                                              │
+│  [≡]            MAP (FULL VIEWPORT)                          │
+│                                                              │
+│                  PixiJS Canvas                               │
+│                                                              │
+│ ┌───────────┐                                                │
+│ │ FUEL %    │                                                │
+│ └───────────┘                                                │
+├──────────────────────────────────────────────────────────────┤
+Left panel opens as semi-transparent overlay with tab system (SYS, CREW, OPS, DOCK).
+Subsystem sections within SYS tab are collapsible. Click into sub-menus for depth.
 ```
 
 ### UI Rendering Rules
 
 1. The UI tree-walker receives a `SubsystemNode` and renders it as a collapsible section.
-2. Top-level children of the ship root render as sections in the left panel.
+2. Top-level children of the ship root render as sections in the SYS tab of the left panel.
 3. Each section shows its direct values. Child subsystems render as clickable links that open a sub-panel (slide-over or drill-down).
 4. Values render according to their `displayHint`. Default is `number`.
 5. `controlled` values in AUTO mode show as readouts. In MANUAL mode, they become interactive (sliders, inputs).
 6. The `autoValue` ghost indicator appears only when a value is in MANUAL and differs from what AUTO would choose.
 7. Values exceeding `warnThreshold` render in amber/yellow. Values exceeding `criticalThreshold` render in red.
 8. `warnBelow` and `criticalBelow` work the same way but trigger when the value drops below the threshold (useful for fuel, integrity).
-9. The bottom bar is always visible and cannot be collapsed. It shows the minimum information needed to fly: heading, thrust, speed, fuel fraction.
-10. The right panel is empty when nothing is selected. It populates on click/selection of any map entity. It clears when the player clicks empty space on the map.
+9. Floating corner HUDs are always visible and show critical at-a-glance data: game clock, nav status, fuel. These persist regardless of left panel state.
+10. Left-clicking map objects opens info popups as floating overlays. Clicking empty space dismisses them. The [More →] link opens detail modals.
 
 ### Visual Language
 
@@ -581,6 +597,8 @@ None of this requires player input beyond the initial command. All of it is visi
 
 8. **Mass coupling is critical to get right early.** `structural.mass_total` must correctly sum hull + propellant + cargo at all times, and `drive.current_acceleration` must derive from thrust / mass_total. This is the relationship players feel most directly.
 
-9. **All of this exists in the `simulation/` module from the Phase 1 technical brief.** The subsystem tree is part of the ship state managed by `system.ts`. The bridge pattern still applies — the client receives serialized SubsystemNode trees through the same interface that will become WebSocket messages.
+9. **All of this exists in the `simulation/` module from the Phase 1 technical brief.** The subsystem tree is part of the ship state managed by `system.ts`. The bridge pattern still applies — the client receives serialized SubsystemNode trees through the same interface that will become WebSocket messages. The nav computer route model (see Navigation Refactor doc) means ship positions during transit are deterministic and derived from route math, not physics integration — making the subsystem simulation a parallel concern rather than a tightly coupled one.
 
-10. **Phase 1 implementation: start with navigation + drive + propellant + structural only.** Get the mass-thrust-fuel loop working and feeling right. Then layer in reactor, thermal, and sensors as subsequent additions. The tree architecture means these additions don't require refactoring — they're just new branches on an existing tree.
+10. **Phase 1 implementation: start with navigation + drive + propellant + structural only.** Get the route-based transit working with accurate fuel costs derived from the mass-thrust-fuel loop. The nav computer computes routes, the drive's reaction mass ratio and the ship's total mass determine transit times and fuel consumption. Then layer in reactor, thermal, and sensors as subsequent additions. The tree architecture means these additions don't require refactoring — they're just new branches on an existing tree.
+
+11. **Subsystem simulation tick vs. route evaluation.** The nav computer model means ship position during transit is derived from route math, not integrated. But subsystems still need periodic updates — the reactor generates heat, radiators dissipate it, fuel depletes. These updates can happen at a low frequency (every few game-seconds) during routine transit, with faster updates during encounters or when the player is actively viewing subsystem panels. This is a rendering/simulation optimization, not an architectural concern — the subsystem tree doesn't care how often it's updated.
