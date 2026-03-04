@@ -250,6 +250,7 @@ export class StarSystem {
         radius: b.radius,
         color: b.color,
         elements: b.elements,
+        parentId: b.parentId,
       })),
       ships: this.ships.map(s => {
         let isDecelerating = false;

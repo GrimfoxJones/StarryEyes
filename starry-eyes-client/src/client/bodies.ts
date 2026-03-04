@@ -4,6 +4,27 @@ import { computeOrbitalEllipse } from '../simulation/kepler.ts';
 import { MIN_BODY_PIXEL_RADIUS } from '../simulation/constants.ts';
 import type { Camera } from './camera.ts';
 
+/** Below this screen-px distance to parent, moon is fully hidden */
+const MOON_HIDE_PX = 20;
+/** Between HIDE and FADE, moon alpha lerps 0→1 */
+const MOON_FADE_PX = 40;
+
+/** Returns true if a moon should be non-interactive (fully hidden at current zoom). */
+export function isMoonHidden(
+  body: BodySnapshot,
+  bodies: readonly BodySnapshot[],
+  camera: Camera,
+): boolean {
+  if (body.type !== 'moon' || !body.parentId) return false;
+  const parent = bodies.find(b => b.id === body.parentId);
+  if (!parent) return false;
+  const moonScreen = camera.simToScreen(body.position.x, body.position.y);
+  const parentScreen = camera.simToScreen(parent.position.x, parent.position.y);
+  const dx = moonScreen.x - parentScreen.x;
+  const dy = moonScreen.y - parentScreen.y;
+  return Math.sqrt(dx * dx + dy * dy) < MOON_HIDE_PX;
+}
+
 const LABEL_STYLE = new TextStyle({
   fontFamily: 'Consolas, Courier New, monospace',
   fontSize: 10,
@@ -24,8 +45,31 @@ export class BodyRenderer {
   update(bodies: readonly BodySnapshot[], camera: Camera): void {
     const usedIds = new Set<string>();
 
+    // Build lookup for parent screen positions (needed for moon culling)
+    const bodyById = new Map<string, BodySnapshot>();
+    for (const b of bodies) bodyById.set(b.id, b);
+
     for (const body of bodies) {
       usedIds.add(body.id);
+
+      // Moon visibility: fade out when close to parent on screen
+      let moonAlpha = 1;
+      if (body.type === 'moon' && body.parentId) {
+        const parent = bodyById.get(body.parentId);
+        if (parent) {
+          const moonScreen = camera.simToScreen(body.position.x, body.position.y);
+          const parentScreen = camera.simToScreen(parent.position.x, parent.position.y);
+          const dx = moonScreen.x - parentScreen.x;
+          const dy = moonScreen.y - parentScreen.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+
+          if (dist < MOON_HIDE_PX) {
+            moonAlpha = 0;
+          } else if (dist < MOON_FADE_PX) {
+            moonAlpha = (dist - MOON_HIDE_PX) / (MOON_FADE_PX - MOON_HIDE_PX);
+          }
+        }
+      }
 
       // Render orbit ellipse (only for non-star bodies with elements)
       if (body.elements && body.type !== 'star') {
@@ -35,7 +79,11 @@ export class BodyRenderer {
           this.container.addChild(orbitGfx);
           this.orbitGraphics.set(body.id, orbitGfx);
         }
-        this.drawOrbitEllipse(orbitGfx, body, camera);
+        if (moonAlpha === 0) {
+          orbitGfx.clear();
+        } else {
+          this.drawOrbitEllipse(orbitGfx, body, camera, moonAlpha);
+        }
       }
 
       // Render body circle
@@ -45,7 +93,11 @@ export class BodyRenderer {
         this.container.addChild(gfx);
         this.bodyGraphics.set(body.id, gfx);
       }
-      this.drawBody(gfx, body, camera);
+      if (moonAlpha === 0) {
+        gfx.clear();
+      } else {
+        this.drawBody(gfx, body, camera, moonAlpha);
+      }
 
       // Label (skip asteroids to reduce clutter)
       if (body.type !== 'asteroid') {
@@ -56,9 +108,15 @@ export class BodyRenderer {
           this.container.addChild(label);
           this.labelTexts.set(body.id, label);
         }
-        const screen = camera.simToScreen(body.position.x, body.position.y);
-        label.x = screen.x + 8;
-        label.y = screen.y - 4;
+        if (moonAlpha === 0) {
+          label.visible = false;
+        } else {
+          label.visible = true;
+          label.alpha = 0.6 * moonAlpha;
+          const screen = camera.simToScreen(body.position.x, body.position.y);
+          label.x = screen.x + 8;
+          label.y = screen.y - 4;
+        }
       }
     }
 
@@ -72,7 +130,7 @@ export class BodyRenderer {
     }
   }
 
-  private drawBody(gfx: Graphics, body: BodySnapshot, camera: Camera): void {
+  private drawBody(gfx: Graphics, body: BodySnapshot, camera: Camera, moonAlpha = 1): void {
     const screen = camera.simToScreen(body.position.x, body.position.y);
 
     // Minimum pixel radius for visibility
@@ -80,8 +138,9 @@ export class BodyRenderer {
     const pixelRadius = Math.max(simRadius, MIN_BODY_PIXEL_RADIUS);
 
     // Star gets a glow effect
-    const alpha = body.type === 'star' ? 1.0 :
-                  body.type === 'asteroid' ? 0.6 : 0.9;
+    const baseAlpha = body.type === 'star' ? 1.0 :
+                      body.type === 'asteroid' ? 0.6 : 0.9;
+    const alpha = baseAlpha * moonAlpha;
 
     gfx.clear();
     gfx.circle(0, 0, pixelRadius);
@@ -97,7 +156,7 @@ export class BodyRenderer {
     gfx.y = screen.y;
   }
 
-  private drawOrbitEllipse(gfx: Graphics, body: BodySnapshot, camera: Camera): void {
+  private drawOrbitEllipse(gfx: Graphics, body: BodySnapshot, camera: Camera, moonAlpha = 1): void {
     if (!body.elements) return;
 
     // Skip orbits that are too large or too small on screen
@@ -111,7 +170,8 @@ export class BodyRenderer {
 
     gfx.clear();
 
-    const alpha = body.type === 'asteroid' ? 0.05 : 0.15;
+    const baseAlpha = body.type === 'asteroid' ? 0.05 : 0.15;
+    const alpha = baseAlpha * moonAlpha;
 
     let started = false;
     for (let i = 0; i < points.length; i++) {

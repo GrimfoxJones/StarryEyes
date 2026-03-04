@@ -1,8 +1,12 @@
 import { useGameStore } from './store.ts';
+import { LeftPanel } from './left-panel/LeftPanel.tsx';
+import { DetailModal } from './modals/DetailModal.tsx';
+import './theme.css';
 import './hud.css';
 
 export function HudOverlay() {
   const snapshot = useGameStore((s) => s.snapshot);
+  const leftPanelOpen = useGameStore((s) => s.leftPanelOpen);
 
   if (!snapshot) return null;
 
@@ -10,8 +14,11 @@ export function HudOverlay() {
 
   return (
     <div className="hud">
+      {/* Left panel (collapsible) */}
+      <LeftPanel />
+
       {/* Top-left: Time controls */}
-      <div className="hud-panel hud-top-left">
+      <div className={`hud-panel hud-top-left${leftPanelOpen ? ' panel-open' : ''}`}>
         <div className="hud-label">GAME TIME</div>
         <div className="hud-value">{formatGameTime(snapshot.gameTime)}</div>
         <div className="hud-row">
@@ -67,6 +74,9 @@ export function HudOverlay() {
           <div className="hud-hint">Right-click=destination ESC=cancel</div>
         </div>
       )}
+
+      {/* Detail modal */}
+      <DetailModal />
     </div>
   );
 }

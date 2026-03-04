@@ -1,0 +1,63 @@
+/* ── StarryEyes CIC Theme ─────────────────────────────────────────── */
+:root {
+  /* Background */
+  --bg-deep: rgba(5, 10, 30, 0.90);
+  --bg-panel: rgba(5, 10, 30, 0.75);
+  --bg-surface: rgba(15, 25, 50, 0.85);
+  --bg-hover: rgba(40, 70, 120, 0.3);
+  --bg-active: rgba(40, 70, 120, 0.5);
+  --bg-backdrop: rgba(0, 0, 0, 0.6);
+
+  /* Borders */
+  --border-subtle: rgba(100, 180, 255, 0.2);
+  --border-medium: rgba(100, 180, 255, 0.35);
+  --border-accent: rgba(0, 200, 255, 0.6);
+
+  /* Text */
+  --text-primary: #88ccff;
+  --text-bright: #aaddff;
+  --text-label: rgba(100, 160, 220, 0.6);
+  --text-hint: rgba(100, 160, 220, 0.35);
+  --text-white: #ddeeff;
+
+  /* Accent */
+  --accent-cyan: #00ccff;
+  --accent-cyan-dim: rgba(0, 200, 255, 0.3);
+
+  /* Status */
+  --status-nominal: #44ff88;
+  --status-warning: #ffaa00;
+  --status-danger: #ff4444;
+  --status-offline: #666688;
+  --status-active: #ff9944;
+
+  /* Bars */
+  --bar-thrust-start: #ff6600;
+  --bar-thrust-end: #ffaa00;
+  --bar-fuel-start: #0066ff;
+  --bar-fuel-end: #00ccff;
+  --bar-bg: rgba(100, 180, 255, 0.1);
+
+  /* Alert */
+  --alert-red: #ff6644;
+
+  /* Fonts */
+  --font-mono: 'Consolas', 'Courier New', monospace;
+  --font-size-xs: 9px;
+  --font-size-sm: 10px;
+  --font-size-md: 13px;
+  --font-size-lg: 18px;
+
+  /* Z-indices */
+  --z-hud: 10;
+  --z-left-panel: 20;
+  --z-popup: 30;
+  --z-modal-backdrop: 40;
+  --z-modal: 50;
+
+  /* Layout */
+  --left-panel-width: 414px;
+  --panel-radius: 4px;
+  --panel-padding: 10px 14px;
+  --transition-speed: 0.3s;
+}

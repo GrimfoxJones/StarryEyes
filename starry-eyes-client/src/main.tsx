@@ -30,7 +30,7 @@ async function boot() {
   const trail = new TrailRecorder();
 
   // Input
-  setupInput(app.canvas, renderer.camera, system);
+  setupInput(app.canvas, renderer.camera, system, renderer.targetDisplay);
 
   // React HUD
   const hudRoot = document.getElementById('hud-root')!;
@@ -81,6 +81,9 @@ async function boot() {
     renderer.render(lastSnapshot);
     renderer.renderPrediction(predictionPoints);
     renderer.renderTrail(trail.getPoints());
+
+    // Update targeting display
+    renderer.targetDisplay.update(lastSnapshot, app.ticker.deltaMS);
 
     // Update HUD store
     useGameStore.getState().update(lastSnapshot);

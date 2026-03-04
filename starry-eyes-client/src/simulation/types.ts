@@ -135,6 +135,7 @@ export interface BodySnapshot {
   readonly radius: number;
   readonly color: number;
   readonly elements: OrbitalElements | null;
+  readonly parentId: string | null;
 }
 
 export interface ShipSnapshot {

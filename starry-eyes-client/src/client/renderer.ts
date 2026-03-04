@@ -2,6 +2,7 @@ import { Application, Container, Graphics } from 'pixi.js';
 import type { SystemSnapshot } from '../simulation/types.ts';
 import { Camera } from './camera.ts';
 import { BodyRenderer } from './bodies.ts';
+import { TargetDisplay } from './targeting/TargetDisplay.ts';
 
 export class GameRenderer {
   app: Application;
@@ -13,6 +14,7 @@ export class GameRenderer {
 
   // Sub-renderers
   bodyRenderer: BodyRenderer;
+  targetDisplay: TargetDisplay;
 
   private shipGraphics: Graphics;
   private predictionGraphics: Graphics;
@@ -37,6 +39,8 @@ export class GameRenderer {
 
     // Sub-renderers
     this.bodyRenderer = new BodyRenderer(this.worldContainer);
+    this.targetDisplay = new TargetDisplay(this.camera);
+    this.uiContainer.addChild(this.targetDisplay.container);
 
     // Ship graphics
     this.shipGraphics = new Graphics();

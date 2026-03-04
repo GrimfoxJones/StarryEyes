@@ -1,0 +1,69 @@
+.left-panel-container {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  z-index: var(--z-left-panel);
+  pointer-events: none;
+}
+
+.left-panel {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: var(--left-panel-width);
+  height: 100%;
+  background: var(--bg-deep);
+  border-right: 1px solid var(--border-subtle);
+  transform: translateX(-100%);
+  transition: transform var(--transition-speed) ease;
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  font-family: var(--font-mono);
+}
+
+.left-panel.open {
+  transform: translateX(0);
+}
+
+.left-panel-body {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+.left-panel-content {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.left-panel-toggle {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  transform: translateY(-50%);
+  width: 20px;
+  height: 60px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-subtle);
+  border-left: none;
+  border-radius: 0 4px 4px 0;
+  cursor: pointer;
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-label);
+  font-size: 12px;
+  transition: left var(--transition-speed) ease, background 0.15s;
+}
+
+.left-panel-toggle:hover {
+  background: var(--bg-hover);
+  color: var(--accent-cyan);
+}
+
+.left-panel-toggle.open {
+  left: var(--left-panel-width);
+}

@@ -1,22 +1,28 @@
 .hud {
-  font-family: 'Consolas', 'Courier New', monospace;
-  color: #88ccff;
-  font-size: 13px;
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+  font-size: var(--font-size-md);
   user-select: none;
 }
 
 .hud-panel {
   position: absolute;
-  background: rgba(5, 10, 30, 0.75);
-  border: 1px solid rgba(100, 180, 255, 0.2);
-  border-radius: 4px;
-  padding: 10px 14px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--panel-radius);
+  padding: var(--panel-padding);
   min-width: 160px;
+  z-index: var(--z-hud);
 }
 
 .hud-top-left {
   top: 16px;
   left: 16px;
+  transition: left var(--transition-speed) ease;
+}
+
+.hud-top-left.panel-open {
+  left: calc(var(--left-panel-width) + 16px);
 }
 
 .hud-top-right {
@@ -31,16 +37,16 @@
 }
 
 .hud-label {
-  color: rgba(100, 160, 220, 0.6);
-  font-size: 10px;
+  color: var(--text-label);
+  font-size: var(--font-size-sm);
   letter-spacing: 1px;
   text-transform: uppercase;
   margin-bottom: 2px;
 }
 
 .hud-value {
-  color: #aaddff;
-  font-size: 18px;
+  color: var(--text-bright);
+  font-size: var(--font-size-lg);
   font-weight: bold;
   margin-bottom: 6px;
 }
@@ -58,7 +64,7 @@
 }
 
 .hud-alert {
-  color: #ff6644;
+  color: var(--alert-red);
   font-size: 11px;
   font-weight: bold;
   letter-spacing: 1px;
@@ -66,14 +72,14 @@
 }
 
 .hud-active {
-  color: #ff9944;
+  color: var(--status-active);
   font-size: 11px;
 }
 
 .hud-bar-container {
   width: 100%;
   height: 6px;
-  background: rgba(100, 180, 255, 0.1);
+  background: var(--bar-bg);
   border-radius: 3px;
   margin-bottom: 8px;
   overflow: hidden;
@@ -86,16 +92,16 @@
 }
 
 .hud-bar-thrust {
-  background: linear-gradient(90deg, #ff6600, #ffaa00);
+  background: linear-gradient(90deg, var(--bar-thrust-start), var(--bar-thrust-end));
 }
 
 .hud-bar-fuel {
-  background: linear-gradient(90deg, #0066ff, #00ccff);
+  background: linear-gradient(90deg, var(--bar-fuel-start), var(--bar-fuel-end));
 }
 
 .hud-hint {
-  color: rgba(100, 160, 220, 0.35);
-  font-size: 9px;
+  color: var(--text-hint);
+  font-size: var(--font-size-xs);
   margin-top: 4px;
   letter-spacing: 0.5px;
 }
