@@ -19,7 +19,7 @@ export function HudOverlay() {
         <div className="hud-value">{formatGameTime(snapshot.gameTime)}</div>
         <div className="hud-row">
           <span className="hud-label">WARP</span>
-          <span className="hud-value">{snapshot.timeCompression}x</span>
+          <span className="hud-value">{formatCompression(snapshot.timeCompression)}</span>
           {snapshot.paused && <span className="hud-alert">PAUSED</span>}
         </div>
         <div className="hud-hint">SPACE=pause +/-=warp</div>
@@ -33,6 +33,10 @@ export function HudOverlay() {
           <div className="hud-row">
             <span className="hud-label">HDG</span>
             <span className="hud-value">{headingDeg}&deg;</span>
+          </div>
+          <div className="hud-row">
+            <span className="hud-label">REF</span>
+            <span className="hud-value">{ship.parentBodyId.toUpperCase()}</span>
           </div>
           <div className="hud-hint">Right-click to set heading</div>
         </div>
@@ -74,10 +78,19 @@ export function HudOverlay() {
 }
 
 function formatGameTime(seconds: number): string {
-  const h = Math.floor(seconds / 3600);
+  const days = Math.floor(seconds / 86400);
+  const h = Math.floor((seconds % 86400) / 3600);
   const m = Math.floor((seconds % 3600) / 60);
   const s = Math.floor(seconds % 60);
+  if (days > 0) {
+    return `D${days} ${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  }
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+}
+
+function formatCompression(value: number): string {
+  if (value >= 1000) return `${value / 1000}kx`;
+  return `${value}x`;
 }
 
 function formatSpeed(mps: number): string {

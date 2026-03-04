@@ -69,6 +69,7 @@ export interface OrbitalElements {
   readonly M0: number;         // mean anomaly at epoch (rad)
   readonly epoch: number;      // reference time (game seconds)
   readonly mu: number;         // gravitational parameter of parent (m³/s²)
+  readonly direction: 1 | -1;  // 1 = prograde (CCW), -1 = retrograde (CW)
 }
 
 // ── Celestial Body ──────────────────────────────────────────────────
@@ -99,6 +100,7 @@ export interface ShipState {
   readonly fuelConsumptionRate: number; // kg/s at full thrust
   isThrusting: boolean;
   coastOrbit: OrbitalElements | null;
+  parentBodyId: string;
 }
 
 // ── Snapshots (serialization-friendly) ──────────────────────────────
@@ -123,6 +125,7 @@ export interface ShipSnapshot {
   readonly fuel: number;
   readonly maxFuel: number;
   readonly speed: number;
+  readonly parentBodyId: string;
 }
 
 export interface SystemSnapshot {

@@ -5,11 +5,14 @@ import type {
   PlayerCommand,
   Vec2,
 } from './types.ts';
-import { vec2, vec2Length, Vec2Zero } from './types.ts';
-import { keplerPositionAtTime, keplerStateAtTime, stateToElements } from './kepler.ts';
+import { vec2, vec2Add, vec2Sub, vec2Length, Vec2Zero } from './types.ts';
+import { keplerPositionAtTime, keplerStateAtTime, stateToElements, computeOrbitalEllipse } from './kepler.ts';
 import { integrateShipStep } from './physics.ts';
 import { processCommand } from './commands.ts';
+import { buildSOITable, determineSOIParent, getMuForBody } from './soi.ts';
+import type { SOIEntry } from './soi.ts';
 import {
+  G,
   STAR_MU,
   STAR_MASS,
   MAX_SUBSTEP_DT,
@@ -17,7 +20,6 @@ import {
   SHIP_FUEL_CAPACITY,
   SHIP_FUEL_CONSUMPTION_RATE,
   PREDICTION_STEPS,
-  PREDICTION_STEP_DT,
 } from './constants.ts';
 
 // ── Body definitions ────────────────────────────────────────────────
@@ -38,44 +40,48 @@ function makeBody(
 ): CelestialBody {
   return {
     id, name, type, mass, radius, color, parentId,
-    elements: { a, e, omega, M0, epoch: 0, mu },
+    elements: { a, e, omega, M0, epoch: 0, mu, direction: 1 },
   };
 }
 
 function createBodies(): CelestialBody[] {
-  // Star
+  // Star — real Sun
   const sol: CelestialBody = {
     id: 'sol', name: 'Sol', type: 'star',
-    mass: STAR_MASS, radius: 5e8, color: 0xffdd44,
+    mass: STAR_MASS, radius: 6.96e8, color: 0xffdd44,
     elements: null, parentId: null,
   };
 
-  // Planets — a in meters, orbiting Sol
-  const tellus = makeBody('tellus', 'Tellus', 'planet', 1e24, 6e6, 0x4488ff,
-    'sol', 2e10, 0.02, 0.5, 0, STAR_MU);
-  // T(tellus) ≈ 600s by construction
+  // Planets — real orbital parameters
+  // Tellus (Earth): a=1.496e11m, T≈365.25d, v_orb≈29.8 km/s
+  const tellus = makeBody('tellus', 'Tellus', 'planet', 5.972e24, 6.371e6, 0x4488ff,
+    'sol', 1.496e11, 0.017, 1.796, 0, STAR_MU);
 
-  const mara = makeBody('mara', 'Mara', 'planet', 5e23, 4e6, 0xcc6644,
-    'sol', 4.5e10, 0.05, 1.2, 2.0, STAR_MU);
+  // Mara (Mars): a=2.279e11m, T≈687d
+  const mara = makeBody('mara', 'Mara', 'planet', 6.39e23, 3.39e6, 0xcc6644,
+    'sol', 2.279e11, 0.093, 5.0, 2.0, STAR_MU);
 
-  const jove = makeBody('jove', 'Jove', 'planet', 1e26, 2e7, 0xddaa66,
-    'sol', 8e10, 0.03, 0.8, 4.0, STAR_MU);
+  // Jove (Jupiter): a=7.785e11m, T≈4333d
+  const jove = makeBody('jove', 'Jove', 'planet', 1.898e27, 6.99e7, 0xddaa66,
+    'sol', 7.785e11, 0.049, 4.8, 4.0, STAR_MU);
 
-  // Moons of Jove — orbit Jove, mu = G*M_jove
-  const joveMu = 6.674e-11 * 1e26;
-  const europa = makeBody('europa', 'Europa', 'moon', 1e20, 1e6, 0xaaccff,
-    'jove', 5e8, 0.01, 0, 0, joveMu);
-  const ganymede = makeBody('ganymede', 'Ganymede', 'moon', 2e20, 1.5e6, 0xccbbaa,
-    'jove', 1e9, 0.02, 1.0, 1.5, joveMu);
+  // Moons of Jove — real Jupiter mu
+  const joveMu = G * 1.898e27; // ≈1.267e17
+  // Europa: a=6.709e8m, T≈3.55d
+  const europa = makeBody('europa', 'Europa', 'moon', 4.8e22, 1.56e6, 0xaaccff,
+    'jove', 6.709e8, 0.009, 0, 0, joveMu);
+  // Ganymede: a=1.0704e9m, T≈7.15d
+  const ganymede = makeBody('ganymede', 'Ganymede', 'moon', 1.48e23, 2.63e6, 0xccbbaa,
+    'jove', 1.0704e9, 0.0013, 1.0, 1.5, joveMu);
 
-  // Asteroids scattered between Mara and Jove orbits
+  // Asteroids in the belt (~2.2–3.3 AU)
   const asteroids: CelestialBody[] = [];
   const rng = seedRng(42);
   for (let i = 0; i < 15; i++) {
-    const a = 3.5e10 + rng() * 2e10; // 35,000–55,000 km range
+    const a = 3.3e11 + rng() * 1.6e11; // 2.2–3.3 AU
     asteroids.push(makeBody(
       `asteroid_${i}`, `AST-${i + 1}`, 'asteroid', 1e15, 5e4, 0x888888,
-      'sol', a, 0.01 + rng() * 0.1, rng() * Math.PI * 2, rng() * Math.PI * 2, STAR_MU,
+      'sol', a, 0.01 + rng() * 0.15, rng() * Math.PI * 2, rng() * Math.PI * 2, STAR_MU,
     ));
   }
 
@@ -100,10 +106,13 @@ function createPlayerShip(bodies: CelestialBody[], gameTime: number): ShipState 
   const tellus = bodies.find(b => b.id === 'tellus')!;
   const tellusElements = tellus.elements!;
 
-  // Offset ship slightly from Tellus (5e8 m higher orbit)
-  const shipA = tellusElements.a + 5e8;
+  // Offset ship slightly from Tellus (~1 million km higher orbit)
+  const shipA = tellusElements.a + 1e9;
   const shipElements = { ...tellusElements, a: shipA };
   const shipState = keplerStateAtTime(shipElements, gameTime);
+
+  // Compute proper coast orbit from state vectors
+  const coastOrbit = stateToElements(shipState.pos, shipState.vel, STAR_MU, gameTime);
 
   return {
     id: 'player',
@@ -115,7 +124,8 @@ function createPlayerShip(bodies: CelestialBody[], gameTime: number): ShipState 
     fuel: SHIP_FUEL_CAPACITY,
     fuelConsumptionRate: SHIP_FUEL_CONSUMPTION_RATE,
     isThrusting: false,
-    coastOrbit: { ...tellusElements, a: shipA, epoch: gameTime, M0: 0 },
+    coastOrbit,
+    parentBodyId: 'sol',
   };
 }
 
@@ -130,28 +140,39 @@ export class StarSystem {
 
   // Cached body positions (updated each tick)
   bodyPositions: Map<string, Vec2> = new Map();
+  // Cached body velocities for SOI-relevant bodies (planets + moons)
+  bodyVelocities: Map<string, Vec2> = new Map();
+  // Precomputed SOI table
+  soiTable: SOIEntry[];
 
   constructor() {
     this.bodies = createBodies();
     this.gameTime = 0;
     this.paused = false;
-    this.timeCompression = 30;
+    this.timeCompression = 10000;
+    this.soiTable = buildSOITable(this.bodies);
     this.ships = [createPlayerShip(this.bodies, this.gameTime)];
 
-    // Initialize positions
+    // Initialize positions and velocities
     this.updateBodyPositions();
-
-    // Initialize ship coast orbit properly
-    const ship = this.ships[0];
-    const shipOrbit = this.computeShipCoastOrbit(ship);
-    ship.coastOrbit = shipOrbit;
   }
 
-  computeShipCoastOrbit(ship: ShipState) {
-    return stateToElements(ship.position, ship.velocity, STAR_MU, this.gameTime);
+  /** Get the global position of a body (Vec2Zero for sol). */
+  getBodyPosition(bodyId: string): Vec2 {
+    if (bodyId === 'sol') return Vec2Zero;
+    return this.bodyPositions.get(bodyId) ?? Vec2Zero;
+  }
+
+  /** Get the global velocity of a body (Vec2Zero for sol). */
+  getBodyVelocity(bodyId: string): Vec2 {
+    if (bodyId === 'sol') return Vec2Zero;
+    return this.bodyVelocities.get(bodyId) ?? Vec2Zero;
   }
 
   private updateBodyPositions(): void {
+    // Set of body IDs that need velocity (SOI-relevant bodies)
+    const soiBodyIds = new Set(this.soiTable.map(e => e.bodyId));
+
     for (const body of this.bodies) {
       if (body.elements === null) {
         // Star at origin
@@ -159,15 +180,53 @@ export class StarSystem {
       } else if (body.parentId && body.parentId !== 'sol') {
         // Moon: compute position relative to parent, then add parent position
         const parentPos = this.bodyPositions.get(body.parentId) ?? Vec2Zero;
-        const localPos = keplerPositionAtTime(body.elements, this.gameTime);
-        this.bodyPositions.set(body.id, vec2(
-          parentPos.x + localPos.x,
-          parentPos.y + localPos.y,
-        ));
+
+        if (soiBodyIds.has(body.id)) {
+          // Need velocity too — use keplerStateAtTime
+          const localState = keplerStateAtTime(body.elements, this.gameTime);
+          this.bodyPositions.set(body.id, vec2Add(parentPos, localState.pos));
+          // Moon velocity = parent velocity + local orbital velocity
+          const parentVel = this.bodyVelocities.get(body.parentId) ?? Vec2Zero;
+          this.bodyVelocities.set(body.id, vec2Add(parentVel, localState.vel));
+        } else {
+          const localPos = keplerPositionAtTime(body.elements, this.gameTime);
+          this.bodyPositions.set(body.id, vec2(
+            parentPos.x + localPos.x,
+            parentPos.y + localPos.y,
+          ));
+        }
       } else {
         // Planet/asteroid orbiting sol
-        this.bodyPositions.set(body.id, keplerPositionAtTime(body.elements, this.gameTime));
+        if (soiBodyIds.has(body.id)) {
+          const state = keplerStateAtTime(body.elements, this.gameTime);
+          this.bodyPositions.set(body.id, state.pos);
+          this.bodyVelocities.set(body.id, state.vel);
+        } else {
+          this.bodyPositions.set(body.id, keplerPositionAtTime(body.elements, this.gameTime));
+        }
       }
+    }
+  }
+
+  /** Check if ship should transition to a different SOI parent. If so, recompute coastOrbit. */
+  private checkSOITransition(ship: ShipState): void {
+    const newParent = determineSOIParent(
+      ship.position, ship.parentBodyId, this.soiTable, this.bodyPositions,
+    );
+
+    if (newParent === ship.parentBodyId) return;
+
+    const oldParent = ship.parentBodyId;
+    ship.parentBodyId = newParent;
+
+    // Recompute coast orbit in new parent's frame if coasting
+    if (ship.coastOrbit && !ship.isThrusting) {
+      const parentPos = this.getBodyPosition(newParent);
+      const parentVel = this.getBodyVelocity(newParent);
+      const localPos = vec2Sub(ship.position, parentPos);
+      const localVel = vec2Sub(ship.velocity, parentVel);
+      const mu = getMuForBody(newParent, this.soiTable, STAR_MU);
+      ship.coastOrbit = stateToElements(localPos, localVel, mu, this.gameTime);
     }
   }
 
@@ -190,12 +249,20 @@ export class StarSystem {
       // Update ships
       for (const ship of this.ships) {
         if (ship.isThrusting && ship.fuel > 0) {
-          integrateShipStep(ship, step, STAR_MU);
+          const mu = getMuForBody(ship.parentBodyId, this.soiTable, STAR_MU);
+          const parentPos = this.getBodyPosition(ship.parentBodyId);
+          integrateShipStep(ship, step, mu, parentPos);
         } else if (ship.coastOrbit) {
-          const state = keplerStateAtTime(ship.coastOrbit, this.gameTime);
-          ship.position = state.pos;
-          ship.velocity = state.vel;
+          // Coast orbit is in the parent body's local frame
+          const localState = keplerStateAtTime(ship.coastOrbit, this.gameTime);
+          const parentPos = this.getBodyPosition(ship.parentBodyId);
+          const parentVel = this.getBodyVelocity(ship.parentBodyId);
+          ship.position = vec2Add(parentPos, localState.pos);
+          ship.velocity = vec2Add(parentVel, localState.vel);
         }
+
+        // Check SOI transitions
+        this.checkSOITransition(ship);
       }
 
       remaining -= step;
@@ -228,38 +295,28 @@ export class StarSystem {
         fuel: s.fuel,
         maxFuel: SHIP_FUEL_CAPACITY,
         speed: vec2Length(s.velocity),
+        parentBodyId: s.parentBodyId,
       })),
     };
   }
 
-  /** Predict trajectory for a ship (forward-integration without modifying state) */
-  predictTrajectory(shipId: string, steps: number = PREDICTION_STEPS, stepDt: number = PREDICTION_STEP_DT): Vec2[] {
+  /** Predict trajectory: Keplerian coast orbit relative to current SOI parent */
+  predictTrajectory(shipId: string): Vec2[] {
     const ship = this.ships.find(s => s.id === shipId);
     if (!ship) return [];
 
-    const points: Vec2[] = [{ x: ship.position.x, y: ship.position.y }];
-    let px = ship.position.x;
-    let py = ship.position.y;
-    let vx = ship.velocity.x;
-    let vy = ship.velocity.y;
+    // Compute body-relative state vectors
+    const parentPos = this.getBodyPosition(ship.parentBodyId);
+    const parentVel = this.getBodyVelocity(ship.parentBodyId);
+    const localPos = vec2Sub(ship.position, parentPos);
+    const localVel = vec2Sub(ship.velocity, parentVel);
+    const mu = getMuForBody(ship.parentBodyId, this.soiTable, STAR_MU);
 
-    for (let i = 0; i < steps; i++) {
-      // Gravity from star (at origin)
-      const r2 = px * px + py * py;
-      const r = Math.sqrt(r2);
-      const gMag = -STAR_MU / r2;
-      const ax = gMag * px / r + (ship.isThrusting ? ship.heading.x * ship.thrustLevel * ship.maxAcceleration : 0);
-      const ay = gMag * py / r + (ship.isThrusting ? ship.heading.y * ship.thrustLevel * ship.maxAcceleration : 0);
+    // Compute orbital elements in parent's frame
+    const elements = stateToElements(localPos, localVel, mu, this.gameTime);
 
-      // Euler integration (fast, approximate — fine for prediction)
-      vx += ax * stepDt;
-      vy += ay * stepDt;
-      px += vx * stepDt;
-      py += vy * stepDt;
-
-      points.push({ x: px, y: py });
-    }
-
-    return points;
+    // Generate local orbital ellipse, then offset by parent's global position
+    const localPoints = computeOrbitalEllipse(elements, PREDICTION_STEPS);
+    return localPoints.map(p => vec2Add(p, parentPos));
   }
 }

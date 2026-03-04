@@ -1,7 +1,8 @@
 import type { PlayerCommand } from './types.ts';
-import { vec2Normalize } from './types.ts';
+import { vec2Normalize, vec2Sub } from './types.ts';
 import type { StarSystem } from './system.ts';
 import { stateToElements } from './kepler.ts';
+import { getMuForBody } from './soi.ts';
 import { STAR_MU, TIME_COMPRESSION_STEPS } from './constants.ts';
 
 export function processCommand(system: StarSystem, cmd: PlayerCommand): void {
@@ -32,10 +33,13 @@ export function processCommand(system: StarSystem, cmd: PlayerCommand): void {
         ship.isThrusting = true;
       } else if (wasThrusting && !willThrust) {
         // Thrust → Coast transition
-        // Convert current state vectors to orbital elements
-        ship.coastOrbit = stateToElements(
-          ship.position, ship.velocity, STAR_MU, system.gameTime,
-        );
+        // Convert current state vectors to orbital elements in parent body's frame
+        const parentPos = system.getBodyPosition(ship.parentBodyId);
+        const parentVel = system.getBodyVelocity(ship.parentBodyId);
+        const localPos = vec2Sub(ship.position, parentPos);
+        const localVel = vec2Sub(ship.velocity, parentVel);
+        const mu = getMuForBody(ship.parentBodyId, system.soiTable, STAR_MU);
+        ship.coastOrbit = stateToElements(localPos, localVel, mu, system.gameTime);
         ship.isThrusting = false;
       }
 
