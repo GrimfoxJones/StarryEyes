@@ -100,20 +100,29 @@ export class BodyRenderer {
   private drawOrbitEllipse(gfx: Graphics, body: BodySnapshot, camera: Camera): void {
     if (!body.elements) return;
 
+    // Skip orbits that are too large or too small on screen
+    const orbitScreenRadius = body.elements.a * camera.scale;
+    if (orbitScreenRadius < 5 || orbitScreenRadius > 100000) {
+      gfx.clear();
+      return;
+    }
+
     const points = computeOrbitalEllipse(body.elements, 128);
 
     gfx.clear();
 
     const alpha = body.type === 'asteroid' ? 0.05 : 0.15;
 
-    for (let i = 0; i < points.length - 1; i++) {
-      const p1 = camera.simToScreen(points[i].x, points[i].y);
-      const p2 = camera.simToScreen(points[i + 1].x, points[i + 1].y);
+    let started = false;
+    for (let i = 0; i < points.length; i++) {
+      const p = camera.simToScreen(points[i].x, points[i].y);
 
-      if (i === 0) {
-        gfx.moveTo(p1.x, p1.y);
+      if (!started) {
+        gfx.moveTo(p.x, p.y);
+        started = true;
+      } else {
+        gfx.lineTo(p.x, p.y);
       }
-      gfx.lineTo(p2.x, p2.y);
     }
 
     gfx.stroke({ width: 1, color: body.color, alpha });

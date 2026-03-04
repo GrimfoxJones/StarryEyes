@@ -93,7 +93,7 @@ export function setupInput(
         break;
       case '+':
       case '=': {
-        const steps = [1, 10, 30, 60, 100];
+        const steps = [1, 10, 100, 1000, 5000, 10000, 50000, 100000];
         const idx = steps.indexOf(system.timeCompression);
         if (idx < steps.length - 1) {
           system.command({ type: 'SET_TIME_COMPRESSION', multiplier: steps[idx + 1] });
@@ -101,7 +101,7 @@ export function setupInput(
         break;
       }
       case '-': {
-        const steps = [1, 10, 30, 60, 100];
+        const steps = [1, 10, 100, 1000, 5000, 10000, 50000, 100000];
         const idx = steps.indexOf(system.timeCompression);
         if (idx > 0) {
           system.command({ type: 'SET_TIME_COMPRESSION', multiplier: steps[idx - 1] });

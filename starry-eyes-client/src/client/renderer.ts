@@ -100,6 +100,16 @@ export class GameRenderer {
 
     for (let i = 1; i < points.length; i++) {
       const screen = this.camera.simToScreen(points[i].x, points[i].y);
+
+      // Skip points with extreme coordinates
+      if (Math.abs(screen.x) > 1e6 || Math.abs(screen.y) > 1e6) {
+        prevX = screen.x;
+        prevY = screen.y;
+        drawing = true;
+        segmentDist = 0;
+        continue;
+      }
+
       const dx = screen.x - prevX;
       const dy = screen.y - prevY;
       const dist = Math.sqrt(dx * dx + dy * dy);
@@ -149,16 +159,17 @@ export class GameRenderer {
     this.trailGraphics.clear();
     if (points.length < 2) return;
 
-    // Draw segments with fading alpha
-    for (let i = 0; i < points.length - 1; i++) {
-      const alpha = 0.6 * (i / points.length);
-      const p1 = this.camera.simToScreen(points[i].x, points[i].y);
-      const p2 = this.camera.simToScreen(points[i + 1].x, points[i + 1].y);
+    // Draw as a single polyline with uniform alpha (much cheaper than per-segment stroke)
+    const first = this.camera.simToScreen(points[0].x, points[0].y);
+    this.trailGraphics.moveTo(first.x, first.y);
 
-      this.trailGraphics.moveTo(p1.x, p1.y);
-      this.trailGraphics.lineTo(p2.x, p2.y);
-      this.trailGraphics.stroke({ width: 1, color: 0x00ccff, alpha });
+    for (let i = 1; i < points.length; i++) {
+      const p = this.camera.simToScreen(points[i].x, points[i].y);
+      if (Math.abs(p.x) > 1e6 || Math.abs(p.y) > 1e6) continue;
+      this.trailGraphics.lineTo(p.x, p.y);
     }
+
+    this.trailGraphics.stroke({ width: 1, color: 0x00ccff, alpha: 0.4 });
   }
 
   private renderShips(snapshot: SystemSnapshot): void {

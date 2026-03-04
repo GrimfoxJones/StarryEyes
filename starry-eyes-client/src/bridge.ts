@@ -5,7 +5,7 @@ import type { StarSystem } from './simulation/system.ts';
 export interface ISimulationBridge {
   sendCommand(cmd: PlayerCommand): void;
   getSnapshot(): SystemSnapshot;
-  predictTrajectory(shipId: string, steps?: number): Vec2[];
+  predictTrajectory(shipId: string): Vec2[];
 }
 
 /** Phase 1: direct in-process bridge */
@@ -20,7 +20,7 @@ export class LocalBridge implements ISimulationBridge {
     return this.system.snapshot();
   }
 
-  predictTrajectory(shipId: string, steps?: number): Vec2[] {
-    return this.system.predictTrajectory(shipId, steps);
+  predictTrajectory(shipId: string): Vec2[] {
+    return this.system.predictTrajectory(shipId);
   }
 }

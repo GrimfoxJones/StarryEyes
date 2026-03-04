@@ -6,10 +6,12 @@ export class Camera {
   y = 0;
 
   // Logarithmic zoom: actual scale = BASE^zoomLevel
+  // scale = pixels per meter. At system view (~2e11m across 800px): ~4e-9
+  // At close-up (~1e7m across 800px): ~8e-5
   private zoomLevel = 0;
-  private readonly zoomBase = 1.1;
-  private readonly minZoomLevel = -80;
-  private readonly maxZoomLevel = 80;
+  private readonly zoomBase = 1.05;
+  private readonly minScale = 1e-10;  // full system view
+  private readonly maxScale = 1e-3;   // very close zoom
 
   // Viewport size
   viewportWidth = 800;
@@ -29,11 +31,10 @@ export class Camera {
     return Math.pow(this.zoomBase, this.zoomLevel);
   }
 
-  /** Set initial zoom to show system at ~1e11 m across the viewport */
+  /** Set initial zoom to show system (~2 AU across the viewport) */
   initForSystem(): void {
-    // We want the viewport to show ~2e11 m across
-    // scale = viewportWidth / (2 * systemRadius)
-    const targetScale = this.viewportWidth / (2e11);
+    // Show ~2e12 m across (a bit beyond Jupiter's orbit)
+    const targetScale = this.viewportWidth / (2e12);
     this.zoomLevel = Math.log(targetScale) / Math.log(this.zoomBase);
   }
 
@@ -65,7 +66,11 @@ export class Camera {
 
     // Adjust zoom level
     this.zoomLevel += delta > 0 ? -3 : 3;
-    this.zoomLevel = Math.max(this.minZoomLevel, Math.min(this.maxZoomLevel, this.zoomLevel));
+
+    // Clamp by actual scale value
+    const minLevel = Math.log(this.minScale) / Math.log(this.zoomBase);
+    const maxLevel = Math.log(this.maxScale) / Math.log(this.zoomBase);
+    this.zoomLevel = Math.max(minLevel, Math.min(maxLevel, this.zoomLevel));
 
     // Get sim position under cursor after zoom
     const simAfter = this.screenToSim(screenX, screenY);
