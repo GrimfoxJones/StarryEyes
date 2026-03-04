@@ -10,32 +10,33 @@
 
 ## Vision
 
-An io-style MMO space trading game set in a persistent, shared galaxy. Players start as lone traders navigating a Newtonian physics sandbox, buying and selling commodities between stations across a star system. The visual language is inspired by The Expanse — information-dense, iconographic, functional displays rather than cinematic 3D. Curved trajectory lines, orbital paths, readouts, and scanner displays *are* the aesthetic.
+An io-style MMO space trading game set in a persistent, shared galaxy. Players start as lone traders navigating a realistic-scale star system, buying and selling commodities between stations. The visual language is inspired by The Expanse — information-dense, iconographic, functional displays rather than cinematic 3D. Curved trajectory lines, orbital paths, readouts, and scanner displays *are* the aesthetic.
 
-Long-term, the game expands into grand strategy territory (empire building, fleet management, territorial control), but that is a future phase. This brief covers only the foundational prototype: a single star system with Keplerian celestial bodies and a player-controlled ship with Newtonian thrust.
+The game world runs at a fixed 100x time compression — one real second equals 100 game seconds. This is a universal clock shared by all players, not a per-player control. There is no pause, no time skip, no variable warp. Transits between moons take moments; transits between planets take real-time minutes to hours. The persistent, shared timeline is fundamental to the io-MMO design.
+
+Long-term, the game expands into grand strategy territory (empire building, fleet management, territorial control), but that is a future phase. This brief covers only the foundational prototype: a single star system at full realistic scale with Keplerian celestial bodies and a player ship controlled by a nav computer (right-click to set destination, ship flies itself via brachistochrone transit).
 
 ---
 
 ## Phase 1 Scope
 
-Build a client-side prototype that proves out the core moment-to-moment experience: plotting thrust maneuvers in a Newtonian star system and watching your trajectory evolve in real time.
+Build a client-side prototype that proves out the core moment-to-moment experience: right-clicking a destination and watching your ship compute and fly a route across a realistic-scale star system.
 
 ### What Phase 1 Includes
 
-- A single star system (~100,000 km across) with a central star, several planets, moons, and an asteroid field, all on Keplerian orbits
-- A player ship that can set a heading (direction vector) and thrust level (0–100%), with realistic Newtonian physics
-- A real-time predictive trajectory line showing the ship's future path based on current state, updated continuously during thrust
+- A single star system at full realistic scale (~800 million km across) with a central star, several planets, moons, and an asteroid field, all on Keplerian orbits
+- A player ship with a nav computer: right-click a destination, the ship computes a brachistochrone route (accelerate first half, flip, decelerate second half) and flies itself there automatically
+- Route rendered as a Bézier curve on the map — straight lines from rest, smooth arcs from mid-transit redirects that preserve existing velocity
 - A trail line behind the ship showing where it has been
-- Time compression (target: roughly 30–100x, tunable — a cross-system transit should take a few real-time minutes)
-- Pause, speed up, slow down time controls
-- An Expanse-inspired UI overlay: velocity readout, thrust percentage, fuel gauge, time compression indicator
+- Fixed 100x time compression (universal game clock — one real second = 100 game seconds, shared by all players, no per-player controls)
+- An Expanse-inspired UI overlay: velocity readout, destination, ETA, fuel gauge, game clock
 - Zoomable map from full-system view down to local-body proximity
-- No economy, no docking, no combat, no multiplayer — just flight
+- No economy, no docking, no combat — just flight
 
 ### What Phase 1 Does NOT Include
 
-- Server-side anything (but architecture must support migration — see below)
-- Other players or NPCs
+- Per-player time controls (time compression is universal and fixed at 100x)
+- Other players or NPCs (but architecture must support them — see below)
 - Economy, trade, inventory
 - Combat
 - Sound (Howler.js integration deferred)
@@ -65,17 +66,17 @@ This is the most important architectural constraint. The physics simulation runs
 ```
 src/
 ├── simulation/          # ZERO browser/rendering dependencies
-│   ├── types.ts         # Core data types (Vec2, OrbitalElements, ShipState, etc.)
+│   ├── types.ts         # Core data types (Vec2, OrbitalElements, ShipState, Route, etc.)
 │   ├── constants.ts     # G, time scale, system scale, body masses
 │   ├── kepler.ts        # Keplerian orbit math (elements ↔ state vectors, propagation)
-│   ├── physics.ts       # Newtonian integration for thrusting ships
-│   ├── system.ts        # Star system state: bodies, ships, simulation tick
-│   └── commands.ts      # Player command interface (set heading, set thrust, etc.)
+│   ├── nav.ts           # Nav computer: intercept computation, Bézier route generation, route evaluation
+│   ├── system.ts        # Star system state: bodies, ships, game clock tick
+│   └── commands.ts      # Player command interface (set destination, etc.)
 │
 ├── client/              # Browser-only, rendering and input
 │   ├── renderer.ts      # PixiJS scene management
 │   ├── camera.ts        # Pan, zoom, coordinate transforms
-│   ├── trails.ts        # Ship trail and prediction line rendering
+│   ├── trails.ts        # Ship trail and route line rendering
 │   ├── bodies.ts        # Celestial body rendering (icons, orbit lines)
 │   ├── hud/             # React components for UI overlay
 │   └── input.ts         # Mouse/keyboard → commands
@@ -98,9 +99,9 @@ interface SimulationBridge {
   // Simulation → Client (state updates)
   onStateUpdate(callback: (state: SystemSnapshot) => void): void;
 
-  // Client queries (for prediction lines, etc.)
+  // Client queries
   queryPosition(entityId: string, time: number): Vec2;
-  predictTrajectory(shipId: string, steps: number): Vec2[];
+  queryRoute(shipId: string): Route | null;
 }
 ```
 
@@ -108,14 +109,14 @@ In Phase 2, a `WebSocketBridge` implements the same interface, serializing comma
 
 ### The Simulation Loop
 
-The simulation module exposes a `tick(dt: number)` function. In Phase 1, the client calls this from `requestAnimationFrame` scaled by time compression. In Phase 2, the server calls it from a `setInterval`. The simulation does not know or care who is calling it.
+The simulation module exposes a `tick(dt: number)` function. In Phase 1, the client calls this from `requestAnimationFrame` scaled by the fixed 100x time compression. In Phase 2, the server calls it from a `setInterval`. The simulation does not know or care who is calling it.
 
 ```typescript
 // system.ts
 class StarSystem {
   bodies: CelestialBody[];      // Planets, moons, asteroids — Keplerian
-  ships: Ship[];                // Player ships — Newtonian when thrusting, Keplerian when coasting
-  gameTime: number;             // Current game time in seconds (integer-safe range)
+  ships: Ship[];                // Player ships — route-based when in transit
+  gameTime: number;             // Current game time in seconds
 
   tick(dt: number): SystemSnapshot {
     this.gameTime += dt;
@@ -125,12 +126,29 @@ class StarSystem {
       body.position = keplerPositionAtTime(body.elements, this.gameTime);
     }
 
-    // Update thrusting ships (numerical integration)
+    // Update ships based on their current state
     for (const ship of this.ships) {
-      if (ship.isThrusting) {
-        integrateShip(ship, dt, this.bodies);  // Verlet or RK4
-      } else {
-        ship.position = keplerPositionAtTime(ship.coastOrbit, this.gameTime);
+      switch (ship.state.mode) {
+        case 'transit':
+          // Position derived from route math (Bézier + acceleration profile)
+          ship.position = evaluateRoute(ship.state.route, this.gameTime);
+          // Check for arrival
+          if (this.gameTime >= ship.state.route.arrivalTime) {
+            this.completeTransit(ship);
+          }
+          break;
+        case 'orbit':
+          // Ship is logically "at" the body. Position tracks the body.
+          ship.position = keplerPositionAtTime(
+            this.getBody(ship.state.bodyId).elements, this.gameTime
+          );
+          break;
+        case 'docked':
+          // Ship is at the station. Position tracks the station's parent body.
+          break;
+        case 'idle':
+          // Ship is stationary in space. No update needed.
+          break;
       }
     }
 
@@ -138,6 +156,8 @@ class StarSystem {
   }
 }
 ```
+
+No numerical physics integration is needed for the player ship. Ships in transit derive their position from the nav computer's route math (see Route Curves companion document). Ships in orbit, docked, or idle have trivial position updates.
 
 ---
 
@@ -148,7 +168,7 @@ class StarSystem {
 - Origin: system barycenter (central star)
 - Units: meters for position, m/s for velocity, m/s² for acceleration
 - 2D (top-down orbital plane) — sufficient for a trading game, dramatically simplifies physics and rendering
-- At 100,000 km system radius, max coordinate value is 10^11 meters. 64-bit doubles provide sub-millimeter precision. No local frame transforms needed at this scale.
+- At realistic scale (~800 million km system radius), max coordinate value is ~8 × 10^11 meters. 64-bit doubles provide sub-millimeter precision at this range (15+ significant digits). No local frame transforms needed.
 
 ### Celestial Bodies — Keplerian
 
@@ -169,81 +189,89 @@ interface CelestialBody {
 
 Moons orbit planets, planets orbit the star. Render orbital paths as dim ellipses behind the body icons.
 
-### Ships — Newtonian Under Thrust
+### Ships — Nav Computer Route-Based
 
-A ship has two modes:
-
-**Thrusting:** Numerically integrated each tick. The ship has a heading (unit vector) and thrust level (0–1). Acceleration = heading × thrustLevel × maxAcceleration. Gravity from the nearest dominant body is added. Use Velocity Verlet integration — stable, simple, sufficient for these timescales.
-
-**Coasting:** When thrust is zero, convert current (position, velocity) into Keplerian orbital elements relative to the dominant body. Store elements. Evaluate analytically. No tick cost. When thrust resumes, convert back to state vectors and return to integration.
+A ship is always in one of four states: docked, orbit, transit, or idle. During transit, position is derived from the nav computer's route math — not from numerical physics integration. See the Navigation Refactor and Route Curves companion documents for full detail.
 
 ```typescript
 interface Ship {
   id: string;
-  position: Vec2;               // m, system-relative
-  velocity: Vec2;               // m/s
-  heading: Vec2;                // Unit vector, direction of thrust
-  thrustLevel: number;          // 0.0 – 1.0
-  maxAcceleration: number;      // m/s² (9.81 for 1g ship, ~29.4 for 3g)
+  position: Vec2;               // m, system-relative (derived from state)
+  maxAcceleration: number;      // m/s² (14.7 for 1.5g trader)
   fuel: number;                 // kg of propellant remaining
-  fuelConsumptionRate: number;  // kg/s at full thrust (scaled by thrustLevel)
-  isThrusting: boolean;
-  coastOrbit: OrbitalElements | null;  // Set when coasting, null when thrusting
+  fuelConsumptionRate: number;  // kg/s at full thrust
+  state: ShipState;
+}
+
+type ShipState =
+  | { mode: 'docked'; stationId: string }
+  | { mode: 'orbit'; bodyId: string }
+  | { mode: 'transit'; route: Route }
+  | { mode: 'idle'; position: Vec2; velocity: Vec2 };
+
+interface Route {
+  P0: Vec2;                     // Start position
+  P1: Vec2;                     // Bézier control point (encodes initial velocity)
+  P2: Vec2;                     // Destination (intercept point)
+  startTime: number;            // Game time at route start
+  transitTime: number;          // Total transit duration (game seconds)
+  arrivalTime: number;          // startTime + transitTime
+  arcLength: number;            // Total Bézier arc length (meters)
+  acceleration: number;         // Ship acceleration for this route
+  arcLengthTable: ArcLengthEntry[]; // Pre-computed lookup for distance → Bézier t
 }
 ```
 
+**Transit:** The ship follows a quadratic Bézier curve with a brachistochrone acceleration profile (accelerate first half, flip, decelerate second half). Position at any time is computed analytically from route data — no tick-by-tick integration. See Route Curves doc for the full math.
+
+**Mid-transit redirect:** When the player right-clicks a new destination during transit, the ship's current velocity (direction from Bézier tangent, magnitude from acceleration profile) feeds into the new route's P1 control point, producing a smooth arc. Velocity is NEVER zeroed on redirect. See Bugfix: Preserve Velocity doc.
+
+**Orbit:** The ship is logically "at" a body. The icon orbits visually at a fixed rate. No physics runs.
+
+**Idle:** The ship is stationary in space after arriving at an empty-space destination.
+
 ### Gravity
 
-Simplified dominant-body model. Each point in space is governed by one body's gravity (sphere of influence). For Phase 1, just the star's gravity everywhere is fine — planets are too small at this scale to matter much, and it keeps the physics clean. Gravity from the star:
+At the thrust levels used in this game (1–3g), gravity during transit is negligible compared to engine acceleration. Ships fly routes computed by the nav computer; gravity is not factored into route math. Keplerian orbital mechanics still govern celestial body motion (planets, moons, asteroids), but the player ship does not experience gravitational forces during transit. This is a deliberate simplification — see the Navigation Refactor doc for rationale.
 
-```
-a_gravity = -G * M_star / |r|² * r̂
-```
-
-Where r is the vector from star to ship. This is added to thrust acceleration each tick.
+Future consideration: gravity could matter at very low thrust levels or near massive bodies, but this is not a Phase 1 concern.
 
 ### Time Compression
 
-Game time advances at a configurable multiplier of real time. Target range: 30x–100x (tunable at runtime via UI controls).
+Game time advances at a fixed 100x multiplier of real time. This is a universal game clock — all players share the same game time. There are no per-player pause, speed up, or slow down controls. One real second = 100 game seconds.
 
 ```typescript
+const TIME_COMPRESSION = 100;  // Fixed. Not configurable per player.
 const realDt = (Date.now() - lastRealTime) / 1000;  // seconds
-const gameDt = realDt * timeCompression;
+const gameDt = realDt * TIME_COMPRESSION;
 system.tick(gameDt);
 ```
 
-Integration substeps may be needed at high compression to keep physics stable. If gameDt > some threshold (e.g., 60 game-seconds), subdivide into smaller steps.
+At 100x compression with realistic-scale distances:
+- Moon-to-moon transit (~400,000 km at 1.5g): ~3 hours game time → ~1.7 minutes real time
+- Inner planet to mid-system (~78 million km at 1.5g): ~40 hours game time → ~24 minutes real time
+- Inner planet to outer planet (~630 million km at 1.5g): ~115 hours game time → ~69 minutes real time
 
-Provide UI controls: pause, 1x, 10x, 30x, 60x, 100x. Show current compression and game clock prominently.
+Long transits are intentional. Players manage their ship, monitor contacts, and trade during the journey. There is no time skip — this is a persistent shared world.
 
-### Predictive Trajectory Line
+Show the game clock prominently in the UI. No warp controls are exposed to the player.
 
-This is the signature visual feature. At all times, render a dotted/dashed line ahead of the ship showing its predicted future path. Computed by running the physics forward from current state for N steps without modifying actual state.
+### Route Line (Trajectory Visualization)
+
+This is the signature visual feature. When a ship is in transit, render the nav computer's planned route ahead of the ship as a Bézier curve. This is NOT a physics prediction — it's the actual path the ship will follow, computed from the route's control points.
 
 ```typescript
-function predictTrajectory(ship: Ship, system: StarSystem, steps: number, stepDt: number): Vec2[] {
-  // Clone ship state
-  let pos = ship.position.clone();
-  let vel = ship.velocity.clone();
-  const points: Vec2[] = [pos.clone()];
-
-  for (let i = 0; i < steps; i++) {
-    // Same integration as real physics, but on cloned state
-    const gravity = computeGravity(pos, system.bodies);
-    const thrust = ship.isThrusting
-      ? ship.heading.scale(ship.thrustLevel * ship.maxAcceleration)
-      : Vec2.ZERO;
-    const acc = gravity.add(thrust);
-    vel = vel.add(acc.scale(stepDt));
-    pos = pos.add(vel.scale(stepDt));
-    points.push(pos.clone());
+function getRoutePoints(route: Route, numPoints: number): Vec2[] {
+  const points: Vec2[] = [];
+  for (let i = 0; i <= numPoints; i++) {
+    const t = i / numPoints;
+    points.push(evaluateBezier(route.P0, route.P1, route.P2, t));
   }
-
   return points;
 }
 ```
 
-Update this every frame. During thrust, the line shifts dynamically — this IS the gameplay feedback. The player watches the prediction line and adjusts heading/thrust to shape their trajectory.
+The route line is always accurate — it IS the path. When the player right-clicks a new destination, the new route line appears immediately, showing the smooth Bézier arc from the ship's current position and velocity toward the new intercept point. The old route line fades out as the new one draws. The player's feedback loop is seeing the route curve on the map, the ETA, and the fuel cost — not manually shaping a trajectory.
 
 ### Trail Line
 
@@ -261,9 +289,9 @@ The Expanse, not Star Wars. Think CIC tactical displays, not cinematic space vis
 - **Star:** Bright point/glow at center, no fancy effects needed
 - **Planets:** Small colored circles/icons with labels. Size exaggerated for visibility at zoom-out. Orbital path rendered as a dim ellipse
 - **Ship:** Small directional icon (triangle/chevron) with heading indicator. Bright color (cyan/green)
-- **Prediction line:** Dashed, same color family as ship but lower opacity, extending forward from ship
-- **Trail:** Solid thin line behind ship, fading to transparent over distance
-- **Thrust indicator:** Visual cue on ship icon when engines are firing (glow, particle trail, or simple line extending opposite to heading)
+- **Route line:** The nav computer's planned Bézier route rendered as a bright accent-color curve from ship to destination. Straight when departing from rest, smoothly arcing on mid-transit redirects.
+- **Trail:** Solid thin line behind ship, fading to transparent over distance. Course change bends are visible in the trail.
+- **Drive indicator:** Visual cue on ship icon when engines are firing (glow, particle trail, or simple line extending opposite to heading)
 - **UI text:** Monospace or condensed sans-serif. Think military/aerospace labeling
 
 ### Camera
@@ -284,7 +312,7 @@ screenX = (simX - cameraX) * zoom + viewportWidth / 2
 screenY = (simY - cameraY) * zoom + viewportHeight / 2
 ```
 
-Zoom level determines meters-per-pixel. At full zoom-out with 100,000 km system: roughly 100km per pixel on a 1000px viewport.
+Zoom level determines meters-per-pixel. At full zoom-out with ~800 million km system radius: roughly 800,000 km per pixel on a 1000px viewport. The logarithmic zoom range is much larger at realistic scale — zooming from full-system down to local-body proximity spans many orders of magnitude.
 
 ---
 
@@ -294,32 +322,40 @@ All player interaction with the simulation goes through a command interface. Nev
 
 ```typescript
 type PlayerCommand =
-  | { type: 'SET_HEADING'; shipId: string; heading: Vec2 }
-  | { type: 'SET_THRUST'; shipId: string; level: number }
-  | { type: 'SET_TIME_COMPRESSION'; multiplier: number }
-  | { type: 'PAUSE' }
-  | { type: 'RESUME' };
+  | { type: 'SET_DESTINATION'; shipId: string; target: DestinationTarget }
+  | { type: 'CANCEL_ROUTE'; shipId: string }
+  | { type: 'UNDOCK'; shipId: string };
+
+type DestinationTarget =
+  | { kind: 'body'; bodyId: string }         // Planet or moon — intercept computed
+  | { kind: 'station'; stationId: string }    // Station — dock on arrival
+  | { kind: 'point'; position: Vec2 };        // Empty space — fly there and stop
 ```
 
-**Heading input:** Click a point in space → compute direction vector from ship to click point → issue SET_HEADING command. Or: click-drag from ship to set heading and thrust proportionally.
+**Navigation input:** Right-click on the map → identify target (body, station, or empty space) → issue SET_DESTINATION command. The nav computer computes the intercept, generates the Bézier route, and the ship begins transit. No heading or thrust controls are exposed to the player.
 
-**Thrust input:** UI slider or keyboard shortcuts (0–9 for 0%–90%, shift+0 for 100%).
+Time compression is not a player command — it is a fixed universal constant (100x).
 
 ---
 
 ## Initial Star System Layout
 
-A handcrafted test system for Phase 1. Not procedurally generated.
+A handcrafted test system for Phase 1. Not procedurally generated. Full realistic scale — distances are solar-system-like.
 
 | Body | Type | Orbital Radius | Orbital Period (game time) | Mass | Notes |
 |------|------|---------------|---------------------------|------|-------|
-| Sol | Star | — | — | ~10^30 kg | Central body. Exact mass tuned to produce desired orbital periods at the compressed scale. |
-| Tellus | Planet | ~20,000 km | Tuned to ~10 min game time | Minor | Inner rocky world. Starting area candidate. |
-| Mara | Planet | ~45,000 km | Tuned to ~30 min game time | Minor | Mid-system. Asteroid belt nearby. |
-| Jove | Planet | ~80,000 km | Tuned to ~60 min game time | Moderate | Outer gas giant. Has 1-2 moons. |
-| Scattered asteroids | Asteroid field | ~35,000–55,000 km | Various | Negligible | Visual interest, future mining sites. |
+| Sol | Star | — | — | ~2 × 10^30 kg | Central body. Solar mass produces realistic Keplerian orbits. |
+| Tellus | Planet | ~150,000,000 km (1 AU) | ~365 game days | Minor | Inner rocky world. Starting area candidate. Has 1 moon. |
+| Mara | Planet | ~230,000,000 km (1.5 AU) | ~687 game days | Minor | Mid-system. Asteroid belt nearby. |
+| Jove | Planet | ~780,000,000 km (5.2 AU) | ~12 game years | Moderate | Outer gas giant. Has 2-3 moons. |
+| Scattered asteroids | Asteroid field | ~300,000,000–500,000,000 km | Various | Negligible | Visual interest, future mining sites. |
 
-Note: These are compressed-scale numbers. Tune masses and radii until orbital periods look and feel right at target time compression. The star's mass is a free parameter — set it to whatever makes the orbital mechanics produce satisfying timescales.
+These are full realistic-scale distances. The star's mass should produce orbital periods consistent with Kepler's laws at these radii. At 100x time compression, a Tellus year passes in ~3.65 real-time days.
+
+Transit times at 1.5g (14.7 m/s²) across these distances:
+- Tellus to its moon (~400,000 km): ~3 hours game time → ~1.7 min real time
+- Tellus to Mara (closest approach ~78M km): ~40 hours game time → ~24 min real time
+- Tellus to Jove (closest approach ~630M km): ~115 hours game time → ~69 min real time
 
 ---
 
@@ -345,9 +381,9 @@ Note: These are compressed-scale numbers. Tune masses and radii until orbital pe
 
 4. **Frame-rate independent.** The simulation consumes a `dt` parameter. It does not assume any particular frame rate or tick rate.
 
-5. **Prediction line recomputation is the performance hot spot.** Profile this early. If it's too expensive every frame, recompute at lower frequency (every 5–10 frames) and interpolate visually.
+5. **Route line rendering is cheap** — it's a static Bézier curve that only changes when the player redirects. No per-frame recomputation needed. The arc length table is pre-computed once per route.
 
-6. **Coasting orbit conversion** (state vectors → Keplerian elements and back) should be implemented and tested early. This is the trickiest math in the system and needs to be bulletproof.
+6. **Intercept convergence and Bézier control point computation** are the trickiest math in the system. The intercept iteration (finding where a moving planet will be when the ship arrives) and the P1 control point placement (encoding initial velocity into the curve) should be implemented and tested early. See the Route Curves and Navigation Refactor companion documents.
 
 7. **Don't over-optimize Phase 1.** One system, one ship, a handful of bodies. Performance won't be an issue. Focus on correctness and feel.
 
@@ -357,14 +393,14 @@ Note: These are compressed-scale numbers. Tune masses and radii until orbital pe
 
 The prototype is successful if:
 
-- You can watch planets orbit the star on Keplerian paths at compressed time
-- You can set a heading and thrust level and watch your ship accelerate
-- The prediction line updates in real time during thrust and accurately reflects future trajectory
-- Cutting engines converts to a Keplerian coast that matches the prediction line
-- The trail shows your flight history
-- Zooming in and out feels smooth and the system is legible at multiple scales
+- You can watch planets orbit the star on Keplerian paths under the 100x universal clock
+- You can right-click a planet and watch the ship compute and fly a brachistochrone route
+- The route line draws as a Bézier curve on the map, showing the full path to the destination
+- Mid-transit redirect produces a smooth arcing curve that preserves existing velocity — no velocity discontinuity
+- The trail shows your flight history, including the visible bends from course changes
+- Zooming in and out feels smooth and the system is legible at multiple scales (realistic distances make this range enormous)
 - The whole thing looks and feels like an Expanse tactical display
-- Time compression controls work and the system remains stable across the range
+- The 100x universal game clock runs consistently with no per-player time controls
 - The codebase is cleanly separated such that `simulation/` could be dropped into a Node.js project and run without modification
 
 ---

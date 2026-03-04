@@ -53,7 +53,7 @@ The map dominates the viewport. Ship status is conveyed through small, semi-tran
 │ ┌─────────────┐                        ┌───────────────────────┐ │
 │ │ GAME TIME   │                        │ MODE: TRANSIT         │ │
 │ │ D16 20:48:54│                        │ VELOCITY: 900.8 km/s  │ │
-│ │ WARP: 5Kx   │                        │ DEST: Tellus          │ │
+│ │ 100x        │                        │ DEST: Tellus          │ │
 │ └─────────────┘                        │ ETA: 1d 1h            │ │
 │                                        │ DECEL                 │ │
 │                                        └───────────────────────┘ │
@@ -104,7 +104,7 @@ The map is always full-viewport. It is never resized or pushed aside by UI panel
 
 The existing corner HUD elements are already doing the right thing. They convey critical status without obscuring the map. Keep them as-is:
 
-- **Top-left: Game clock.** Game time, warp/time scale, pause controls. Semi-transparent background.
+- **Top-left: Game clock.** Game time and time scale indicator (100x). No player-accessible pause or warp controls — this is a shared MMO clock. Semi-transparent background.
 - **Top-right: Navigation status.** Mode (transit/orbit/idle/docked), velocity, destination, ETA, phase (accel/decel). Semi-transparent background.
 - **Bottom-left: Fuel.** Percentage and bar. Compact. Semi-transparent background.
 - **Bottom-right (future):** Reserved for additional status — signature level, alert indicators, contact count.
@@ -191,7 +191,7 @@ When SYS is first selected, show an overview dashboard — a high-level snapshot
 │                        │
 │  NAV     ● IN TRANSIT  │
 │  Dest: Mara            │
-│  ETA: 4m 32s           │
+│  ETA: 38h 12m          │
 │                        │
 │  DRIVE   ● ACTIVE      │
 │  Thrust: 78%           │
@@ -445,69 +445,69 @@ When the player left-clicks a map object, a compact info popup appears floating 
 
 **Planet/Moon:**
 ```
-┌─────────────────────┐
-│ ◉ MARA              │
-│ Rocky Planet         │
-│ Orbit: 45,000 km    │
-│ Period: 31m game     │
-│ Stations: 2         │
-│                     │
-│ [More →]            │
-└─────────────────────┘
+┌──────────────────────┐
+│ ◉ MARA               │
+│ Rocky Planet          │
+│ Orbit: 1.52 AU       │
+│ Period: 687d game     │
+│ Stations: 2          │
+│                      │
+│ [More →]             │
+└──────────────────────┘
 ```
 
 **Station:**
 ```
-┌─────────────────────┐
-│ ◇ MARA STATION      │
-│ Trade Hub            │
-│ Faction: Independent │
+┌──────────────────────┐
+│ ◇ MARA STATION       │
+│ Trade Hub             │
+│ Faction: Independent  │
 │ Services: MKT RFL RPR│
-│ Range: 12,400 km     │
-│                     │
-│ [More →]            │
-└─────────────────────┘
+│ Range: 84.2M km       │
+│                      │
+│ [More →]             │
+└──────────────────────┘
 ```
 
 **Other Ship (sensor-resolved):**
 ```
-┌─────────────────────┐
-│ △ CONTACT DTR-7741   │
-│ Darter-class         │
-│ Bearing: 045°        │
-│ Range: 28,400 km     │
-│ Vel: 8.2 km/s        │
-│ Drive: FLARE active   │
-│ Via: IR + Transponder │
-│                     │
-│ [More →]            │
-└─────────────────────┘
+┌──────────────────────┐
+│ △ CONTACT DTR-7741    │
+│ Darter-class          │
+│ Bearing: 045°         │
+│ Range: 284,000 km     │
+│ Vel: 82.4 km/s        │
+│ Drive: FLARE active    │
+│ Via: IR + Transponder  │
+│                      │
+│ [More →]             │
+└──────────────────────┘
 ```
 
 **Unidentified Contact (limited sensor data):**
 ```
-┌─────────────────────┐
-│ △ CONTACT UNK-003    │
-│ Bearing: 187°        │
-│ Range: ~52,000 km    │
-│ Mass Class: Medium   │
-│ Drive: Active        │
-│ Via: IR only         │
-│                     │
-│ [More →]            │
-└─────────────────────┘
+┌──────────────────────┐
+│ △ CONTACT UNK-003     │
+│ Bearing: 187°         │
+│ Range: ~520,000 km    │
+│ Mass Class: Medium    │
+│ Drive: Active         │
+│ Via: IR only          │
+│                      │
+│ [More →]             │
+└──────────────────────┘
 ```
 
 **Own Route (clicked on trajectory line):**
 ```
-┌─────────────────────┐
-│ ─ ROUTE TO MARA     │
-│ ETA: 4m 32s          │
-│ Distance: 38,200 km  │
-│ Fuel Cost: 1,240 kg  │
-│ Phase: Accelerating   │
-│ Arrival Vel: ~0 m/s  │
-└─────────────────────┘
+┌──────────────────────┐
+│ ─ ROUTE TO MARA      │
+│ ETA: 38h 12m          │
+│ Distance: 78.2M km    │
+│ Fuel Cost: 1,240 kg   │
+│ Phase: Accelerating    │
+│ Arrival Vel: ~0 m/s   │
+└──────────────────────┘
 ```
 
 ### [More →] — Detail Modals
