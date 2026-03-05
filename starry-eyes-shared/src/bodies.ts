@@ -64,7 +64,7 @@ export function createDefaultBodies(): CelestialBody[] {
   // Tellus moons & station
   const tellusMu = G * 5.972e24;
   const luna = makeBody('luna', 'Luna', 'moon', 7.34e22, 1.74e6, 0xcccccc,
-    'tellus', 3.844e8, 0.055, 0, 0, tellusMu);
+    'tellus', 5.766e8, 0.055, 0, 0, tellusMu);
   const nyx = makeBody('nyx', 'Nyx', 'moon', 1.1e20, 2.5e5, 0x9988aa,
     'tellus', 1.1532e9, 0.02, 2.0, 3.5, tellusMu);
   const tycho = makeBody('tycho', 'Tycho Station', 'station', 5e9, 5e4, 0x44ffcc,
