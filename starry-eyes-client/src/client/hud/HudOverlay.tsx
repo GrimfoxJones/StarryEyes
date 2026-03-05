@@ -1,6 +1,8 @@
 import { useGameStore } from './store.ts';
 import { LeftPanel } from './left-panel/LeftPanel.tsx';
 import { DetailModal } from './modals/DetailModal.tsx';
+import { TravelDialog } from './dialogs/TravelDialog.tsx';
+import { formatGameTime, formatCompression, formatSpeed, formatEta } from './format.ts';
 import './theme.css';
 import './hud.css';
 
@@ -83,46 +85,8 @@ export function HudOverlay() {
 
       {/* Detail modal */}
       <DetailModal />
+      <TravelDialog />
     </div>
   );
 }
 
-function formatGameTime(seconds: number): string {
-  const days = Math.floor(seconds / 86400);
-  const h = Math.floor((seconds % 86400) / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  const s = Math.floor(seconds % 60);
-  if (days > 0) {
-    return `D${days} ${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-  }
-  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-}
-
-function formatCompression(value: number): string {
-  if (value >= 1000) return `${value / 1000}kx`;
-  return `${value}x`;
-}
-
-function formatSpeed(mps: number): string {
-  if (mps > 1000) {
-    return `${(mps / 1000).toFixed(1)} km/s`;
-  }
-  return `${mps.toFixed(0)} m/s`;
-}
-
-function formatEta(seconds: number): string {
-  if (seconds < 60) return `${Math.ceil(seconds)}s`;
-  if (seconds < 3600) {
-    const m = Math.floor(seconds / 60);
-    const s = Math.floor(seconds % 60);
-    return `${m}m ${s}s`;
-  }
-  if (seconds < 86400) {
-    const h = Math.floor(seconds / 3600);
-    const m = Math.floor((seconds % 3600) / 60);
-    return `${h}h ${m}m`;
-  }
-  const d = Math.floor(seconds / 86400);
-  const h = Math.floor((seconds % 86400) / 3600);
-  return `${d}d ${h}h`;
-}

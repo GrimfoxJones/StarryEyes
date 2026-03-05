@@ -25,6 +25,7 @@ async function boot() {
   // Connect to server
   const bridge = new RemoteBridge();
   await bridge.connect();
+  useGameStore.getState().setBridge(bridge);
 
   // Build SOI table (planets only) for camera reference frame
   const allSOIs = buildSOITable(bridge.getBodies());

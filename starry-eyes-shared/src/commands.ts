@@ -30,6 +30,7 @@ export function processCommand(system: ISystemContext, cmd: PlayerCommand): void
         system.gameTime,
         system.bodies,
         (bodyId, t) => system.bodyPositionAtTime(bodyId, t),
+        cmd.acceleration,
       );
 
       if (!route) {
@@ -37,7 +38,9 @@ export function processCommand(system: ISystemContext, cmd: PlayerCommand): void
         break;
       }
 
-      const fuelCost = brachistochroneFuelCost(route.totalTime, ship.fuelConsumptionRate);
+      const accelRatio = (cmd.acceleration ?? ship.maxAcceleration) / ship.maxAcceleration;
+      const scaledFuelRate = ship.fuelConsumptionRate * accelRatio;
+      const fuelCost = brachistochroneFuelCost(route.totalTime, scaledFuelRate);
       if (fuelCost > ship.fuel) {
         ship.velocity = savedVelocity;
         break; // insufficient fuel
@@ -46,7 +49,7 @@ export function processCommand(system: ISystemContext, cmd: PlayerCommand): void
       ship.route = {
         ...route,
         fuelAtRouteStart: ship.fuel,
-        fuelConsumptionRate: ship.fuelConsumptionRate,
+        fuelConsumptionRate: scaledFuelRate,
       };
       ship.mode = 'transit';
       ship.orbitBodyId = null;

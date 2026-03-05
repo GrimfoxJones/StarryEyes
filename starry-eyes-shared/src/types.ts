@@ -166,6 +166,6 @@ export interface SystemSnapshot {
 // ── Player Commands ─────────────────────────────────────────────────
 
 export type PlayerCommand =
-  | { readonly type: 'SET_DESTINATION'; readonly shipId: string; readonly destination: Destination }
+  | { readonly type: 'SET_DESTINATION'; readonly shipId: string; readonly destination: Destination; readonly acceleration?: number }
   | { readonly type: 'CANCEL_ROUTE'; readonly shipId: string }
   | { readonly type: 'UNDOCK'; readonly shipId: string };

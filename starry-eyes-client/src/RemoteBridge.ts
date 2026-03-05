@@ -138,7 +138,7 @@ export class RemoteBridge implements ISimulationBridge {
         await fetch(`${this.serverUrl}/api/commands/set-destination`, {
           method: 'POST',
           headers,
-          body: JSON.stringify({ destination: cmd.destination }),
+          body: JSON.stringify({ destination: cmd.destination, acceleration: cmd.acceleration }),
         });
         break;
       case 'CANCEL_ROUTE':

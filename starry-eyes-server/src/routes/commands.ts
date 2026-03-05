@@ -26,7 +26,7 @@ export function commandRoutes(sessions: SessionStore, game: GameServer): Router 
 
   router.post('/set-destination', (req, res) => {
     const session = (req as unknown as { session: { shipId: string } }).session;
-    const { destination } = req.body as { destination: Destination };
+    const { destination, acceleration } = req.body as { destination: Destination; acceleration?: number };
     if (!destination) {
       res.status(400).json({ error: 'Missing destination' });
       return;
@@ -36,6 +36,7 @@ export function commandRoutes(sessions: SessionStore, game: GameServer): Router 
       type: 'SET_DESTINATION',
       shipId: session.shipId,
       destination,
+      acceleration,
     });
 
     if (!result.ship) {

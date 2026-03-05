@@ -83,10 +83,12 @@ export function setupInput(
     }
 
     if (nearestBodyId && nearestDist < BODY_CLICK_THRESHOLD_PX) {
-      bridge.sendCommand({
-        type: 'SET_DESTINATION',
-        shipId: bridge.getMyShipId(),
+      const body = snapshot.bodies.find(b => b.id === nearestBodyId);
+      const store = useGameStore.getState();
+      store.showTravelDialog({
         destination: { type: 'body', bodyId: nearestBodyId },
+        targetName: body?.name ?? nearestBodyId,
+        accelerationG: 1.0,
       });
     } else {
       const simPos = camera.screenToSim(clickX, clickY);
@@ -139,9 +141,11 @@ export function setupInput(
         break;
 
       case 'Escape':
-        // Priority chain: modal → target → left panel → cancel route
+        // Priority chain: modal → travel dialog → target → left panel → cancel route
         if (store.modal) {
           store.dismissModal();
+        } else if (store.travelDialog) {
+          store.dismissTravelDialog();
         } else if (targetDisplay.active) {
           targetDisplay.dismiss();
         } else if (store.leftPanelOpen) {

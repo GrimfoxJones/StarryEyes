@@ -1,5 +1,6 @@
 import { create } from 'zustand';
-import type { SystemSnapshot } from '@starryeyes/shared';
+import type { SystemSnapshot, Destination } from '@starryeyes/shared';
+import type { ISimulationBridge } from '../../bridge.ts';
 import { TAB_DEFAULTS } from './left-panel/tabConfig.ts';
 
 export type PrimaryTab = 'SYS' | 'CREW' | 'OPS' | 'DOCK';
@@ -17,10 +18,20 @@ export interface ModalState {
   objectType: ObjectType;
 }
 
+export interface TravelDialogState {
+  destination: Destination;
+  targetName: string;
+  accelerationG: number;
+}
+
 interface GameState {
   // Simulation
   snapshot: SystemSnapshot | null;
   update: (snapshot: SystemSnapshot) => void;
+
+  // Bridge ref
+  bridge: ISimulationBridge | null;
+  setBridge: (bridge: ISimulationBridge) => void;
 
   // Left panel
   leftPanelOpen: boolean;
@@ -42,12 +53,22 @@ interface GameState {
   modal: ModalState | null;
   showModal: (modal: ModalState) => void;
   dismissModal: () => void;
+
+  // Travel dialog
+  travelDialog: TravelDialogState | null;
+  showTravelDialog: (state: TravelDialogState) => void;
+  dismissTravelDialog: () => void;
+  setTravelAcceleration: (g: number) => void;
 }
 
 export const useGameStore = create<GameState>((set) => ({
   // Simulation
   snapshot: null,
   update: (snapshot) => set({ snapshot }),
+
+  // Bridge ref
+  bridge: null,
+  setBridge: (bridge) => set({ bridge }),
 
   // Left panel
   leftPanelOpen: false,
@@ -69,4 +90,10 @@ export const useGameStore = create<GameState>((set) => ({
   modal: null,
   showModal: (modal) => set({ modal, popup: null }),
   dismissModal: () => set({ modal: null }),
+
+  // Travel dialog
+  travelDialog: null,
+  showTravelDialog: (state) => set({ travelDialog: state }),
+  dismissTravelDialog: () => set({ travelDialog: null }),
+  setTravelAcceleration: (g) => set((s) => s.travelDialog ? { travelDialog: { ...s.travelDialog, accelerationG: g } } : {}),
 }));

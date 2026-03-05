@@ -191,8 +191,9 @@ export function computeRoute(
   gameTime: number,
   bodies: readonly CelestialBody[],
   bodyPositionFn: BodyPositionFn,
+  overrideAccel?: number,
 ): Route | null {
-  const accel = ship.maxAcceleration;
+  const accel = overrideAccel ?? ship.maxAcceleration;
 
   // If mid-transit, derive current position/velocity from the active route
   // (ship.velocity may be stale — only updated on tick, not between ticks)
