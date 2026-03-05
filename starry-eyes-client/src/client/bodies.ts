@@ -53,7 +53,7 @@ export class BodyRenderer {
 
       // Moon visibility: fade out when close to parent on screen
       let moonAlpha = 1;
-      if (body.type === 'moon' && body.parentId) {
+      if ((body.type === 'moon' || body.type === 'station') && body.parentId) {
         const parent = bodyById.get(body.parentId);
         if (parent) {
           const moonScreen = camera.simToScreen(body.position.x, body.position.y);

@@ -1,6 +1,6 @@
-# StarryEyes Client — Codebase Summary
+# StarryEyes — Codebase Summary
 
-> Expanse-inspired 2D space trading game prototype. Phase 1: Newtonian flight in a Keplerian star system.
+> Expanse-inspired 2D space trading game prototype. Phase 2: pnpm monorepo with authoritative server + client.
 
 ## Tech Stack
 
@@ -8,73 +8,101 @@
 - **UI:** React 19 + Zustand 5 (state management)
 - **Language:** TypeScript (strict mode)
 - **Build:** Vite 7, ESLint 9
+- **Server:** Express 5, ws (WebSocket), tsx (dev runner)
+- **Monorepo:** pnpm workspaces
 
 ## Architecture
 
-The codebase follows a **bridge pattern** that cleanly separates simulation from rendering:
+The codebase is a **pnpm monorepo** with three packages:
 
 ```
-simulation/   — Pure TypeScript, zero browser deps (Node.js-compatible)
-client/       — PixiJS rendering + React HUD + input handling
-bridge.ts     — ISimulationBridge interface decouples the two layers
-main.tsx      — Bootstrap + game loop
+starry-eyes-shared/   — @starryeyes/shared: types, vec2, kepler, nav, soi, bodies, commands
+starry-eyes-server/   — @starryeyes/server: GameServer (20Hz tick), REST + WebSocket
+starry-eyes-client/   — PixiJS rendering + React HUD + RemoteBridge for server communication
 ```
 
-Phase 1 uses `LocalBridge` (in-process). Phase 2 will swap in `WebSocketBridge` for multiplayer.
+A **bridge pattern** decouples the client from the server:
+- `bridge.ts` — `ISimulationBridge` interface (async, push-based snapshots)
+- `RemoteBridge.ts` — REST commands + WebSocket snapshots + local Kepler interpolation
+
+The client connects to the authoritative server via REST (commands) and WebSocket (real-time events). Between server updates, the client interpolates positions locally using the same deterministic math from the shared package.
 
 ---
 
 ## Project Structure
 
 ```
+starry-eyes-shared/src/
+├── index.ts                         # Barrel export
+├── types.ts                         # Vec2, OrbitalElements, ShipState, Route, snapshots, commands
+├── constants.ts                     # Physics constants, rendering config
+├── kepler.ts                        # Kepler equation solver, orbital math
+├── nav.ts                           # Bézier route computation, brachistochrone math
+├── soi.ts                           # Sphere of influence calculations
+├── bodies.ts                        # Body definitions + ship factory
+└── commands.ts                      # Command processor (offline mode)
+
+starry-eyes-server/src/
+├── index.ts                         # Express + ws bootstrap, graceful shutdown
+├── GameServer.ts                    # Authoritative tick loop, ship management, snapshots
+├── config.ts                        # PORT, TICK_RATE_MS, DEFAULT_TIME_COMPRESSION
+├── session.ts                       # SessionStore (token → player mapping)
+├── routes/
+│   ├── auth.ts                      # POST /api/auth/join, /api/auth/leave
+│   ├── commands.ts                  # POST /api/commands/set-destination, cancel-route, undock
+│   ├── state.ts                     # GET /api/state, /api/bodies, /api/ships, /api/sync
+│   └── debug.ts                     # POST /api/debug/set-time-compression, pause, resume
+└── ws/
+    ├── handler.ts                   # WebSocket auth + connection management
+    └── events.ts                    # Event type constants
+
 starry-eyes-client/src/
-├── main.tsx                      # App bootstrap & game loop
-├── bridge.ts                     # ISimulationBridge interface + LocalBridge
+├── main.tsx                         # App bootstrap & game loop
+├── bridge.ts                        # ISimulationBridge interface
+├── RemoteBridge.ts                  # REST + WS client, local interpolation
 ├── simulation/
-│   ├── types.ts                  # Vec2, OrbitalElements, ShipState, SystemSnapshot, commands
-│   ├── constants.ts              # Physics constants, body definitions, rendering config
-│   ├── system.ts                 # StarSystem — tick, snapshots, body positions
-│   ├── kepler.ts                 # Kepler equation solver, orbital math
-│   ├── nav.ts                    # Bézier route computation, brachistochrone math
-│   ├── soi.ts                    # Sphere of influence calculations
-│   ├── commands.ts               # Command processor (destination, pause, time warp)
-│   └── physics.ts                # Velocity Verlet integrator (currently unused)
+│   └── system.ts                    # StarSystem (kept for potential offline mode)
 ├── client/
-│   ├── renderer.ts               # Main PixiJS GameRenderer
-│   ├── camera.ts                 # Logarithmic zoom, pan, sim↔screen coords (Y-flipped)
-│   ├── bodies.ts                 # Body circles, orbit ellipses, labels
-│   ├── trails.ts                 # Ship trail ring buffer recorder
-│   ├── input.ts                  # Mouse & keyboard event handling
-│   ├── targeting/                # Animated targeting reticle system
-│   │   ├── TargetDisplay.ts      # State machine: idle → acquiring → settled → dismissing
-│   │   ├── Reticle.ts            # Four L-bracket corners with glow
-│   │   ├── ConnectorLine.ts      # 90° elbow connector line
-│   │   ├── InfoBox.ts            # Target info panel with [More →]
-│   │   ├── infoContent.ts        # Content formatter (body/station/ship info)
-│   │   ├── positioning.ts        # Quadrant-adaptive placement logic
-│   │   └── easing.ts             # Animation easing functions
-│   └── hud/                      # React-based HUD overlay
-│       ├── store.ts              # Zustand store (snapshot, panels, popups, modals)
-│       ├── HudOverlay.tsx         # Root HUD: time, ship status, fuel bar
-│       ├── hud.css               # HUD layout styles
-│       ├── theme.css             # CSS variables (sci-fi cyan/blue/orange palette)
-│       ├── left-panel/           # Collapsible sidebar with tabs
-│       │   ├── LeftPanel.tsx     # Panel container, toggle, breadcrumbs
-│       │   ├── TabBar.tsx        # SYS / CREW / OPS / DOCK tabs
-│       │   ├── TabContent.tsx    # Routes active tab to content component
-│       │   ├── tabConfig.ts      # Tab & sub-tab definitions
-│       │   ├── StatusDot.tsx     # Colored status indicator
-│       │   ├── sys/SysOverview.tsx    # 9 subsystems with status
-│       │   ├── crew/CrewRoster.tsx    # Crew list with skills
-│       │   ├── ops/OpsOverview.tsx    # Operations summary
-│       │   └── dock/DockOverview.tsx  # Docking services
-│       ├── modals/               # Full-screen detail views
-│       │   ├── DetailModal.tsx   # Backdrop + escape handling
-│       │   ├── ModalContent.tsx  # Routes by object type
-│       │   ├── PlanetDetail.tsx  # Planet detail stub
-│       │   └── StationDetail.tsx # Station detail stub
-│       └── popups/               # Floating info popups (structure in place)
+│   ├── renderer.ts                  # Main PixiJS GameRenderer
+│   ├── camera.ts                    # Logarithmic zoom, pan, sim↔screen coords (Y-flipped)
+│   ├── bodies.ts                    # Body circles, orbit ellipses, labels
+│   ├── trails.ts                    # Ship trail ring buffer recorder
+│   ├── input.ts                     # Mouse & keyboard event handling
+│   ├── targeting/                   # Animated targeting reticle system
+│   │   ├── TargetDisplay.ts         # State machine: idle → acquiring → settled → dismissing
+│   │   ├── Reticle.ts              # Four L-bracket corners with glow
+│   │   ├── ConnectorLine.ts        # 90° elbow connector line
+│   │   ├── InfoBox.ts              # Target info panel with [More →]
+│   │   ├── infoContent.ts          # Content formatter (body/station/ship info)
+│   │   ├── positioning.ts          # Quadrant-adaptive placement logic
+│   │   └── easing.ts               # Animation easing functions
+│   └── hud/                         # React-based HUD overlay
+│       ├── store.ts                 # Zustand store (snapshot, panels, popups, modals)
+│       ├── HudOverlay.tsx           # Root HUD: time, ship status, fuel bar
+│       ├── hud.css                  # HUD layout styles
+│       ├── theme.css                # CSS variables (sci-fi cyan/blue/orange palette)
+│       ├── left-panel/              # Collapsible sidebar with tabs
+│       │   ├── LeftPanel.tsx        # Panel container, toggle, breadcrumbs
+│       │   ├── Breadcrumb.tsx       # Breadcrumb navigation
+│       │   ├── TabBar.tsx           # SYS / CREW / OPS / DOCK tabs
+│       │   ├── TabContent.tsx       # Routes active tab to content component
+│       │   ├── SubTabNav.tsx        # Sub-tab navigation
+│       │   ├── StubPlaceholder.tsx  # Placeholder for unimplemented tabs
+│       │   ├── tabConfig.ts         # Tab & sub-tab definitions
+│       │   ├── StatusDot.tsx        # Colored status indicator
+│       │   ├── sys/SysOverview.tsx  # 9 subsystems with status
+│       │   ├── crew/CrewRoster.tsx  # Crew list with skills
+│       │   ├── ops/OpsOverview.tsx  # Operations summary
+│       │   └── dock/DockOverview.tsx # Docking services
+│       ├── modals/                  # Full-screen detail views
+│       │   ├── DetailModal.tsx      # Backdrop + escape handling
+│       │   ├── DetailModal.css      # Modal styles
+│       │   ├── ModalContent.tsx     # Routes by object type
+│       │   ├── PlanetDetail.tsx     # Planet detail stub
+│       │   └── StationDetail.tsx    # Station detail stub
+│       └── popups/                  # Floating info popups
 │           ├── InfoPopup.tsx
+│           ├── InfoPopup.css
 │           ├── PopupContent.tsx
 │           ├── PlanetInfo.tsx
 │           ├── ShipInfo.tsx
@@ -83,17 +111,19 @@ starry-eyes-client/src/
 
 ---
 
-## Simulation Layer
+## Shared Layer (`@starryeyes/shared`)
 
 ### Types (`types.ts`)
 
-- **Vec2** — Pure-function vector math (not a class): `vec2Add`, `vec2Sub`, `vec2Scale`, `vec2Length`, `vec2Normalize`, `vec2Rotate`, `vec2Dist`, etc.
+- **Vec2** — Pure-function vector math: `vec2Add`, `vec2Sub`, `vec2Scale`, `vec2Length`, `vec2Normalize`, `vec2Rotate`, `vec2Dist`, etc.
 - **OrbitalElements** — Semi-major axis, eccentricity, argument of periapsis, mean anomaly at epoch, direction
-- **CelestialBody** — Star, planet, moon, or asteroid with mass, radius, color, orbital elements, parent ID
-- **ShipState** — Position, velocity, fuel, mode (`idle` | `drift` | `transit` | `orbit`), optional route
-- **Route** — Quadratic Bézier curve (P0→P1→P2) with arc length table, acceleration profile, target body
+- **CelestialBody** — Star, planet, moon, asteroid, or station with mass, radius, color, orbital elements, parent ID
+- **BodyType** — `'star' | 'planet' | 'moon' | 'asteroid' | 'station'`
+- **ShipState** — Position, velocity, fuel, fuelConsumptionRate, mode (`drift` | `transit` | `orbit`), optional route
+- **Route** — Quadratic Bézier curve (P0→P1→P2) with arc length table, acceleration profile, target body, `fuelAtRouteStart`, `fuelConsumptionRate`
+- **ShipSnapshot** — Serializable ship state including fuel, fuelConsumptionRate, heading, route, mode
 - **SystemSnapshot** — Serializable frame: game time, time compression, body snapshots, ship snapshots
-- **PlayerCommand** — `SET_DESTINATION`, `CANCEL_ROUTE`, `SET_TIME_COMPRESSION`, `PAUSE`, `RESUME`
+- **PlayerCommand** — `SET_DESTINATION`, `CANCEL_ROUTE`, `UNDOCK`
 
 ### Kepler Solver (`kepler.ts`)
 
@@ -110,6 +140,7 @@ High-risk math module. Handles both elliptical and hyperbolic orbits.
 Brachistochrone + Bézier routing for the nav computer.
 
 - `brachistochroneTime(dist, accel)` — Time estimate: 2√(dist/accel)
+- `brachistochroneFuelCost(transitTime, fuelRate)` — Fuel cost for a transit
 - `computeRoute(ship, destination, gameTime, bodies, bodyPositionFn)` — Iterative route solver (10 iterations): computes intercept point, control point, arc length table
 - `transitPositionAtTime(route, currentTime)` — Evaluate ship position along route with asymmetric accel/decel profile
 - `sampleRouteAhead(route, currentTime, numPoints)` — Future position samples for prediction line
@@ -119,41 +150,103 @@ Brachistochrone + Bézier routing for the nav computer.
 - `buildSOITable(bodies)` — Computes SOI radii: `a × (mass/parentMass)^(2/5)`
 - `determineSOIParent(...)` — Hysteresis-based parent detection (enter at 1.0×, exit at 1.05×)
 
-### System (`system.ts`)
+### Bodies (`bodies.ts`)
 
-The `StarSystem` class drives the simulation.
+Body definitions and ship factory.
 
-- **Bodies:** Sol (star), Tellus, Mara, Jove (planets), Europa, Ganymede (moons), 15 seeded asteroids
-- **Tick logic** (per ship by mode):
-  - `transit` — Follow Bézier route; on arrival, enter orbit or idle
-  - `orbit` — Rotate around body at visual speed
-  - `drift` — Coast with current velocity
-  - `idle` — Stationary
-- **Snapshots** — Serializable system state each frame
-- **Prediction** — Sample route ahead for trajectory display
+- **Sol** (star)
+- **Tellus** (planet) — with moons **Luna**, **Nyx**, and station **Tycho Station**
+- **Mara** (planet)
+- **Jove** (planet) — with moons **Europa**, **Ganymede**
+- **15 seeded asteroids** in the belt
+- `createPlayerShip(bodies, gameTime, shipId)` — Creates a ship in orbit around Tellus
 
 ### Commands (`commands.ts`)
 
-- `SET_DESTINATION` — Compute route, check fuel, enter transit
-- `CANCEL_ROUTE` — Carry momentum into drift, or stop
-- Time compression and pause/resume
+Shared command processor used by offline mode (`StarSystem`). Uses `ISystemContext` interface.
+
+- `SET_DESTINATION` — Compute route, check fuel, enrich route with fuel fields, enter transit (no upfront fuel deduction)
+- `CANCEL_ROUTE` — Settle fuel at cancellation time, carry momentum into drift
+- `UNDOCK` — Leave orbit into drift
+
+---
+
+## Server Layer (`@starryeyes/server`)
+
+### GameServer (`GameServer.ts`)
+
+Authoritative game state running at 20Hz.
+
+- **Ship management:** `addShip()`, `removeShip()`
+- **Command processing:** `SET_DESTINATION` (route computation + fuel validation), `CANCEL_ROUTE` (fuel settlement), `UNDOCK`
+- **Tick loop** (50ms):
+  - Advance game time by `realDt × timeCompression`
+  - Update body positions via Kepler
+  - Update orbiting ships: advance `orbitAngle`, recompute position around parent body
+  - Continuous fuel consumption for transit ships: `fuel = fuelAtRouteStart - rate × elapsed`
+  - Detect transit arrivals: enter orbit (if target body) or drift (if point), broadcast `SHIP_ARRIVED`
+- **Snapshots:** Full system state or per-ship snapshots with computed heading, ETA, route line
+
+### Server API
+
+| Endpoint | Method | Auth | Description |
+|---|---|---|---|
+| `/api/auth/join` | POST | — | Join game → `{ sessionToken, shipId, gameTime, timeCompression }` |
+| `/api/auth/leave` | POST | Bearer | Leave game |
+| `/api/state` | GET | — | Full system snapshot |
+| `/api/bodies` | GET | — | Body definitions |
+| `/api/ships` | GET | — | All ship snapshots |
+| `/api/sync` | GET | Bearer | Heartbeat sync (gameTime + player's ship) |
+| `/api/commands/set-destination` | POST | Bearer | Set destination (body or point) |
+| `/api/commands/cancel-route` | POST | Bearer | Cancel current route |
+| `/api/commands/undock` | POST | Bearer | Undock from orbit |
+| `/api/debug/set-time-compression` | POST | — | Set time compression |
+| `/api/debug/pause` | POST | — | Pause game |
+| `/api/debug/resume` | POST | — | Resume game |
+| `/ws?token=...` | WS | Query param | Real-time events |
+
+### WebSocket Events
+
+| Event | Direction | Data |
+|---|---|---|
+| `INITIAL_STATE` | Server → Client | Full `SystemSnapshot` |
+| `SHIP_ROUTE_CHANGED` | Server → All | `{ ship: ShipSnapshot }` |
+| `SHIP_ARRIVED` | Server → All | `{ ship: ShipSnapshot }` |
+| `SHIP_CANCELLED` | Server → All | `{ ship: ShipSnapshot }` |
+| `PLAYER_JOINED` | Server → All | `{ playerId, playerName, shipId, ship }` |
+| `PLAYER_LEFT` | Server → All | `{ playerId, playerName, shipId }` |
+
+### Session Management (`session.ts`)
+
+- `SessionStore` maps tokens to `{ token, playerId, playerName, shipId, ws }`
+- WebSocket connections are bound to sessions via query parameter auth
 
 ---
 
 ## Client Layer
 
+### RemoteBridge (`RemoteBridge.ts`)
+
+Connects to the server and provides local interpolation between updates.
+
+- **REST commands:** `sendCommand()` dispatches to appropriate endpoint
+- **WebSocket:** Receives real-time events, updates ship list
+- **Interpolation:** `interpolate()` computes positions between server snapshots:
+  - **Transit:** Evaluate Bézier route + interpolate fuel consumption
+  - **Orbit:** Advance angle from snapshot position using `ORBIT_VISUAL_SPEED`
+  - **Drift:** Linear extrapolation from last known position + velocity
+- **Heartbeat sync:** Polls `/api/sync` every 1s to re-anchor game time and ship state
+
 ### Game Loop (`main.tsx`)
 
 Each frame:
-1. Compute delta time (clamped to 0.1s)
-2. Apply time compression
-3. Tick simulation
-4. Record trail sample (every `TRAIL_SAMPLE_INTERVAL` game-seconds)
-5. Update trajectory prediction (every 5 frames)
-6. Track focus target
-7. Render (bodies, ships, prediction, trail)
-8. Update targeting display animations
-9. Push snapshot to Zustand store
+1. Call `bridge.interpolate()` for latest state
+2. Record trail sample
+3. Update prediction line (every 5 frames)
+4. Track focus target
+5. Render (bodies, ships, prediction, trail)
+6. Update targeting display animations
+7. Push snapshot to Zustand store
 
 ### Camera (`camera.ts`)
 
@@ -174,11 +267,11 @@ Ship drawn as a chevron with thrust flame (orange, opposite heading) when in tra
 
 ### Bodies (`bodies.ts`)
 
-- Body circles with type-appropriate alpha (star 1.0, planets 0.9, asteroids 0.6)
+- Body circles with type-appropriate alpha (star 1.0, planets/moons/stations 0.9, asteroids 0.6)
 - Star glow effect (2× radius, 0.15 alpha)
 - Orbit ellipses (128 points, alpha varies by type)
 - Labels in Consolas 10px cyan (hidden for asteroids)
-- Moons fade/hide when <20–40px from parent on screen
+- Moons and stations fade/hide when <20–40px from parent on screen
 
 ### Input (`input.ts`)
 
@@ -227,6 +320,19 @@ Currently implemented: SysOverview, CrewRoster, OpsOverview, DockOverview. Other
 
 ---
 
+## Fuel System
+
+Fuel is consumed **continuously** during transit, not deducted upfront.
+
+- Route stores `fuelAtRouteStart` and `fuelConsumptionRate`
+- At any time during transit: `fuel = fuelAtRouteStart - rate × elapsed`
+- Server tick updates fuel each frame for transit ships
+- Client interpolates fuel locally between server updates
+- On cancel: fuel is settled at `fuelAtRouteStart - rate × elapsedAtCancel`
+- On arrival: fuel is settled at `fuelAtRouteStart - rate × totalTime`
+
+---
+
 ## Physics Constants
 
 | Constant | Value | Notes |
@@ -234,7 +340,12 @@ Currently implemented: SysOverview, CrewRoster, OpsOverview, DockOverview. Other
 | STAR_MU | 1.327e20 m³/s² | Sun's gravitational parameter |
 | SHIP_MAX_ACCELERATION | 9.81 m/s² | ~1g |
 | SHIP_FUEL_CAPACITY | 100,000 kg | |
-| Time compression steps | 1×, 10×, 100×, 1k×, 5k×, 10k×, 50k×, 100k× | Default: 10,000× |
+| SHIP_FUEL_CONSUMPTION_RATE | 0.02 kg/s | At full thrust |
+| ORBIT_VISUAL_RADIUS | 5e7 m | 50,000 km visual orbit distance |
+| ORBIT_VISUAL_SPEED | 0.05 rad/s | ~2 min per orbit |
+| Time compression steps | 1×, 10×, 100×, 1k×, 5k×, 10k×, 50k×, 100k× | Server default: 1,000× |
+| Server tick rate | 50ms (20Hz) | |
+| Client heartbeat | 1,000ms | Polls `/api/sync` |
 | Trail buffer | 500 points, sampled every 100 game-seconds | |
 | Prediction | 300 steps × 1,000 game-seconds = 300ks lookahead | Updated every 5 frames |
 
@@ -242,14 +353,13 @@ Currently implemented: SysOverview, CrewRoster, OpsOverview, DockOverview. Other
 
 ## Rendering Order (back to front)
 
-1. Starfield (screen space, currently empty)
-2. Orbit ellipses (world space)
-3. Body circles + labels (world space)
-4. Ship chevron + thrust flame (world space)
-5. Prediction dashed line (world space)
-6. Trail solid line (world space)
-7. Targeting display — reticle, connector, info box (screen space)
-8. React HUD overlay (DOM layer)
+1. Orbit ellipses (world space)
+2. Body circles + labels (world space)
+3. Ship chevron + thrust flame (world space)
+4. Prediction dashed line (world space)
+5. Trail solid line (world space)
+6. Targeting display — reticle, connector, info box (screen space)
+7. React HUD overlay (DOM layer)
 
 ---
 

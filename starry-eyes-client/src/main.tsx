@@ -84,11 +84,13 @@ async function boot() {
       );
     }
 
-    // Update prediction every few frames
+    // Update prediction points (only for non-body destinations)
     predictionFrame++;
-    if (predictionFrame % 5 === 0 && myShip?.route) {
-      predictionPoints = sampleRouteAhead(myShip.route, snapshot.gameTime, 30);
-    } else if (!myShip?.route) {
+    if (myShip?.route && !myShip.route.targetBodyId) {
+      if (predictionFrame % 5 === 0) {
+        predictionPoints = sampleRouteAhead(myShip.route, snapshot.gameTime, 30);
+      }
+    } else {
       predictionPoints = [];
     }
 
@@ -125,7 +127,16 @@ async function boot() {
 
     // Render
     renderer.render(snapshot);
-    renderer.renderPrediction(predictionPoints);
+
+    // Draw destination indicator: straight line to body, or Bezier prediction for points
+    if (myShip?.route?.targetBodyId) {
+      const targetBody = snapshot.bodies.find(b => b.id === myShip.route!.targetBodyId);
+      if (targetBody) {
+        renderer.renderDestinationLine(myShip.position, targetBody.position);
+      }
+    } else {
+      renderer.renderPrediction(predictionPoints);
+    }
     // Trail points are reference-frame-local; add referenceOffset so simToScreen
     // (which subtracts referenceOffset) renders them in the correct frame
     const refOff = renderer.camera.referenceOffset;

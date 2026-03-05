@@ -44,7 +44,7 @@ export class RemoteBridge implements ISimulationBridge {
   private bodies: CelestialBody[] = [];
   private lastServerGameTime = 0;
   private lastSnapshotRealTime = 0;
-  private timeCompression = 1000;
+  private timeCompression = 600;
   private lastShips: readonly ShipSnapshot[] = [];
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private reconnectDelay = 1000;

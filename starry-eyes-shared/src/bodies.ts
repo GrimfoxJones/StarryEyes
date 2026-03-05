@@ -70,12 +70,49 @@ export function createDefaultBodies(): CelestialBody[] {
   const tycho = makeBody('tycho', 'Tycho Station', 'station', 5e9, 5e4, 0x44ffcc,
     'tellus', 1.922e9, 0.001, 0.5, 1.0, tellusMu);
 
+  // Captured asteroids orbiting Tellus
+  const cruithne = makeBody('cruithne', 'Cruithne', 'asteroid', 1.3e14, 2.5e4, 0x888888,
+    'tellus', 2.5e9, 0.35, 0.8, 4.2, tellusMu);
+  const kamo = makeBody('kamo', 'Kamo\'oalewa', 'asteroid', 5e13, 2e4, 0x999988,
+    'tellus', 3.2e9, 0.45, 3.5, 1.8, tellusMu);
+
+  // Mara moon & captured asteroids
+  const maraMu = G * 6.39e23;
+  const deimos = makeBody('deimos', 'Deimos', 'moon', 1.48e15, 6.2e3, 0xbb9977,
+    'mara', 6.0e8, 0.03, 1.2, 0.5, maraMu);
+  const maraRock1 = makeBody('mara_rock_1', 'MR-1', 'asteroid', 8e12, 1.5e4, 0x887766,
+    'mara', 1.4e9, 0.3, 4.1, 2.7, maraMu);
+  const maraRock2 = makeBody('mara_rock_2', 'MR-2', 'asteroid', 3e12, 1e4, 0x998877,
+    'mara', 2.1e9, 0.4, 1.9, 5.0, maraMu);
+
   // Jove moons
   const joveMu = G * 1.898e27;
   const europa = makeBody('europa', 'Europa', 'moon', 4.8e22, 1.56e6, 0xaaccff,
     'jove', 6.709e8, 0.009, 0, 0, joveMu);
   const ganymede = makeBody('ganymede', 'Ganymede', 'moon', 1.48e23, 2.63e6, 0xccbbaa,
     'jove', 1.0704e9, 0.0013, 1.0, 1.5, joveMu);
+  const callisto = makeBody('callisto', 'Callisto', 'moon', 1.08e23, 2.41e6, 0x998866,
+    'jove', 1.883e9, 0.007, 2.3, 0.8, joveMu);
+  const io = makeBody('io', 'Io', 'moon', 8.93e22, 1.82e6, 0xddcc44,
+    'jove', 2.8e9, 0.004, 4.5, 3.2, joveMu);
+  const thebe = makeBody('thebe', 'Thebe', 'moon', 4.3e19, 5e5, 0xaa9988,
+    'jove', 3.6e9, 0.02, 0.7, 5.1, joveMu);
+  const himalia = makeBody('himalia', 'Himalia', 'moon', 6.7e18, 8.5e4, 0xbbaa99,
+    'jove', 5.0e9, 0.05, 3.0, 1.4, joveMu);
+  const elara = makeBody('elara', 'Elara', 'moon', 8.7e17, 4.3e4, 0xccbb88,
+    'jove', 6.5e9, 0.08, 5.5, 4.0, joveMu);
+  const pasiphae = makeBody('pasiphae', 'Pasiphae', 'moon', 3.0e17, 3e4, 0xaa8877,
+    'jove', 8.2e9, 0.12, 1.5, 2.6, joveMu);
+
+  // Jove captured asteroids
+  const joveRock1 = makeBody('jove_rock_1', 'JR-1', 'asteroid', 5e13, 2e4, 0x887766,
+    'jove', 1.0e10, 0.25, 2.2, 0.3, joveMu);
+  const joveRock2 = makeBody('jove_rock_2', 'JR-2', 'asteroid', 3e13, 1.5e4, 0x776655,
+    'jove', 1.3e10, 0.35, 5.0, 3.8, joveMu);
+  const joveRock3 = makeBody('jove_rock_3', 'JR-3', 'asteroid', 2e13, 1.2e4, 0x998877,
+    'jove', 1.6e10, 0.4, 0.4, 5.5, joveMu);
+  const joveRock4 = makeBody('jove_rock_4', 'JR-4', 'asteroid', 1e13, 1e4, 0x665544,
+    'jove', 2.0e10, 0.45, 3.7, 1.1, joveMu);
 
   const asteroids: CelestialBody[] = [];
   const rng = seedRng(42);
@@ -87,7 +124,7 @@ export function createDefaultBodies(): CelestialBody[] {
     ));
   }
 
-  return [sol, tellus, luna, nyx, tycho, mara, jove, europa, ganymede, ...asteroids];
+  return [sol, tellus, luna, nyx, tycho, cruithne, kamo, mara, deimos, maraRock1, maraRock2, jove, europa, ganymede, callisto, io, thebe, himalia, elara, pasiphae, joveRock1, joveRock2, joveRock3, joveRock4, ...asteroids];
 }
 
 // ── Ship initialization ─────────────────────────────────────────────

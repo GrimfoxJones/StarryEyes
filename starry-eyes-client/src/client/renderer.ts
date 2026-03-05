@@ -147,6 +147,55 @@ export class GameRenderer {
     this.predictionGraphics.stroke({ width: 1.5, color: 0x00ccff, alpha: 0.4 });
   }
 
+  /** Draw a dashed line from a point (ship) to a destination body */
+  renderDestinationLine(from: { x: number; y: number }, to: { x: number; y: number }): void {
+    this.predictionGraphics.clear();
+
+    const fromScreen = this.camera.simToScreen(from.x, from.y);
+    const toScreen = this.camera.simToScreen(to.x, to.y);
+
+    const dx = toScreen.x - fromScreen.x;
+    const dy = toScreen.y - fromScreen.y;
+    const totalDist = Math.sqrt(dx * dx + dy * dy);
+    if (totalDist < 1) return;
+
+    const ux = dx / totalDist;
+    const uy = dy / totalDist;
+
+    const dashLen = 8;
+    const gapLen = 6;
+    let drawing = true;
+    let segmentDist = 0;
+    let cx = fromScreen.x;
+    let cy = fromScreen.y;
+    let remaining = totalDist;
+
+    this.predictionGraphics.moveTo(cx, cy);
+
+    while (remaining > 0) {
+      const threshold = drawing ? dashLen : gapLen;
+      const step = Math.min(remaining, threshold - segmentDist);
+
+      cx += ux * step;
+      cy += uy * step;
+      remaining -= step;
+      segmentDist += step;
+
+      if (drawing) {
+        this.predictionGraphics.lineTo(cx, cy);
+      } else {
+        this.predictionGraphics.moveTo(cx, cy);
+      }
+
+      if (segmentDist >= threshold) {
+        drawing = !drawing;
+        segmentDist = 0;
+      }
+    }
+
+    this.predictionGraphics.stroke({ width: 1.5, color: 0x00ccff, alpha: 0.4 });
+  }
+
   renderTrail(points: ReadonlyArray<{ readonly x: number; readonly y: number }>): void {
     this.trailGraphics.clear();
     if (points.length < 2) return;
