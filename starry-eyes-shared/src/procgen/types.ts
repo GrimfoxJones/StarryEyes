@@ -251,4 +251,5 @@ export interface GeneratedSystem {
   systemAge: number;
   habitableZone: { inner: number; outer: number };
   frostLine: number;
+  gateOrbitRadius: number;
 }

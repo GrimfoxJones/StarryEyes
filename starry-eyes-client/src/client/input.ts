@@ -141,9 +141,11 @@ export function setupInput(
         break;
 
       case 'Escape':
-        // Priority chain: modal → travel dialog → target → left panel → cancel route
+        // Priority chain: modal → gate dialog → travel dialog → target → left panel → cancel route
         if (store.modal) {
           store.dismissModal();
+        } else if (store.gateDialog) {
+          store.dismissGateDialog();
         } else if (store.travelDialog) {
           store.dismissTravelDialog();
         } else if (targetDisplay.active) {

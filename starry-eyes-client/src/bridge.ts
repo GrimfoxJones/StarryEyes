@@ -1,4 +1,5 @@
 import type { PlayerCommand, SystemSnapshot } from '@starryeyes/shared';
+import type { GateConnectionInfo } from '@starryeyes/shared';
 
 /** Interface that decouples client from simulation. */
 export interface ISimulationBridge {
@@ -8,4 +9,7 @@ export interface ISimulationBridge {
   onSnapshot(cb: (s: SystemSnapshot) => void): () => void;
   connect(): Promise<void>;
   disconnect(): void;
+  jumpGate?(targetSystemIndex: number): Promise<void>;
+  getGateConnections?(): Promise<GateConnectionInfo[]>;
+  currentSystemIndex?: number;
 }

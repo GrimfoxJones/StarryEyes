@@ -8,7 +8,7 @@ export function setupWebSocket(
   server: Server,
   sessions: SessionStore,
   game: GameServer,
-  broadcast: (message: string) => void,
+  _broadcast: (message: string) => void,
 ): WebSocketServer {
   const wss = new WebSocketServer({ noServer: true });
 
@@ -47,39 +47,35 @@ export function setupWebSocket(
     sess.ws = ws;
     console.log(`WebSocket connected: ${sess.playerName} (${sess.shipId})`);
 
-    // Notify others (include full ship snapshot so clients can add the ship)
-    const ship = game.ships.find(s => s.id === sess.shipId);
-    broadcast(JSON.stringify({
-      type: EVENT_PLAYER_JOINED,
-      gameTime: game.gameTime,
-      data: {
-        playerId: sess.playerId,
-        playerName: sess.playerName,
-        shipId: sess.shipId,
-        ship: ship ? game.shipSnapshot(ship) : null,
-      },
-    }));
+    // Determine player's system
+    const sysIndex = game.playerSystems.get(sess.shipId) ?? 0;
 
-    // Send initial full snapshot
+    // Notify others in same system
+    const ship = game.ships.find(s => s.id === sess.shipId);
+    game.broadcastToSystem(sysIndex, EVENT_PLAYER_JOINED, {
+      playerId: sess.playerId,
+      playerName: sess.playerName,
+      shipId: sess.shipId,
+      ship: ship ? game.shipSnapshot(ship) : null,
+    });
+
+    // Send initial full snapshot scoped to player's system
     ws.send(JSON.stringify({
       type: 'INITIAL_STATE',
       gameTime: game.gameTime,
-      data: game.snapshot(),
+      data: game.snapshotForSystem(sysIndex),
     }));
 
     ws.on('close', () => {
       console.log(`WebSocket disconnected: ${sess.playerName}`);
       sess.ws = null;
 
-      broadcast(JSON.stringify({
-        type: EVENT_PLAYER_LEFT,
-        gameTime: game.gameTime,
-        data: {
-          playerId: sess.playerId,
-          playerName: sess.playerName,
-          shipId: sess.shipId,
-        },
-      }));
+      const currentSysIndex = game.playerSystems.get(sess.shipId) ?? 0;
+      game.broadcastToSystem(currentSysIndex, EVENT_PLAYER_LEFT, {
+        playerId: sess.playerId,
+        playerName: sess.playerName,
+        shipId: sess.shipId,
+      });
     });
 
     ws.on('error', (err) => {

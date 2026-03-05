@@ -25,6 +25,22 @@ export function generateSystem(seed: number): GeneratedSystem {
   const planets = generatePlanets(rng, star, habitableZone, frostLine);
   const asteroids = generateAsteroids(rng, star, planets, frostLine);
 
+  // Gate orbit: sqrt(luminosity) * AU, clamped and nudged away from planets
+  const baseGateRadius = Math.sqrt(star.luminositySolar) * AU;
+  const outerPlanetA = planets.length > 0
+    ? Math.max(...planets.map(p => p.semiMajorAxis))
+    : 0;
+  let gateOrbitRadius = Math.max(baseGateRadius, 2 * AU);
+  if (outerPlanetA > 0) gateOrbitRadius = Math.min(gateOrbitRadius, outerPlanetA * 0.95);
+  gateOrbitRadius = Math.max(gateOrbitRadius, 2 * AU);
+  // Nudge if within 10% of any planet's semi-major axis
+  for (const p of planets) {
+    const ratio = gateOrbitRadius / p.semiMajorAxis;
+    if (ratio > 0.9 && ratio < 1.1) {
+      gateOrbitRadius = p.semiMajorAxis * 1.15;
+    }
+  }
+
   return {
     seed,
     star,
@@ -33,6 +49,7 @@ export function generateSystem(seed: number): GeneratedSystem {
     systemAge: star.age,
     habitableZone,
     frostLine,
+    gateOrbitRadius,
   };
 }
 
@@ -98,6 +115,30 @@ export function systemToBodies(system: GeneratedSystem, epoch = 0): CelestialBod
         },
       });
     }
+  }
+
+  // Jump Gate
+  {
+    const gateArgP = rng.range(0, 2 * Math.PI);
+    const gateM0 = rng.range(0, 2 * Math.PI);
+    bodies.push({
+      id: `${system.star.id}_gate`,
+      name: `${system.star.name} Gate`,
+      type: 'gate',
+      mass: 1e6,
+      radius: 5e3,
+      color: 0x00FFAA,
+      parentId: system.star.id,
+      elements: {
+        a: system.gateOrbitRadius,
+        e: 0,
+        omega: gateArgP,
+        M0: gateM0,
+        epoch,
+        mu: system.star.mu,
+        direction: 1,
+      },
+    });
   }
 
   // Asteroids

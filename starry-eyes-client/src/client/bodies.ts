@@ -156,8 +156,28 @@ export class BodyRenderer {
     const alpha = baseAlpha * moonAlpha;
 
     gfx.clear();
-    gfx.circle(0, 0, pixelRadius);
-    gfx.fill({ color: body.color, alpha });
+
+    if (body.type === 'gate') {
+      // Diamond shape for gates
+      const r = pixelRadius;
+      gfx.moveTo(0, -r);
+      gfx.lineTo(r, 0);
+      gfx.lineTo(0, r);
+      gfx.lineTo(-r, 0);
+      gfx.closePath();
+      gfx.fill({ color: body.color, alpha });
+      // Glow
+      const r2 = r * 2;
+      gfx.moveTo(0, -r2);
+      gfx.lineTo(r2, 0);
+      gfx.lineTo(0, r2);
+      gfx.lineTo(-r2, 0);
+      gfx.closePath();
+      gfx.fill({ color: body.color, alpha: 0.1 });
+    } else {
+      gfx.circle(0, 0, pixelRadius);
+      gfx.fill({ color: body.color, alpha });
+    }
 
     // Star glow
     if (body.type === 'star') {
@@ -197,7 +217,7 @@ export class BodyRenderer {
 
     gfx.clear();
 
-    const baseAlpha = body.type === 'asteroid' ? 0.05 : 0.15;
+    const baseAlpha = body.type === 'asteroid' ? 0.05 : body.type === 'gate' ? 0.25 : 0.15;
     const alpha = baseAlpha * moonAlpha;
 
     let started = false;

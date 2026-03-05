@@ -9,8 +9,8 @@ export function authRoutes(sessions: SessionStore, game: GameServer, _broadcast:
     const playerName = (req.body as { playerName?: string })?.playerName ?? `Player_${Date.now().toString(36)}`;
     const session = sessions.create(playerName);
 
-    // Create ship in game world
-    game.addShip(session.shipId);
+    // Create ship in game world (starting system 0)
+    game.addShip(session.shipId, 0);
 
     console.log(`Player joined: ${playerName} → ship ${session.shipId}`);
 
@@ -20,6 +20,7 @@ export function authRoutes(sessions: SessionStore, game: GameServer, _broadcast:
       playerId: session.playerId,
       playerName: session.playerName,
       gameTime: game.gameTime,
+      systemIndex: 0,
     });
   });
 

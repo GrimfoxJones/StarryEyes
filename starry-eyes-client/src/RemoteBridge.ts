@@ -7,6 +7,7 @@ import type {
   CelestialBody,
   Vec2,
 } from '@starryeyes/shared';
+import type { GateConnectionInfo } from '@starryeyes/shared';
 import {
   vec2, vec2Add, vec2Scale, Vec2Zero,
   keplerPositionAtTime,
@@ -22,6 +23,7 @@ import {
 } from '@starryeyes/shared';
 import type { SOIEntry } from '@starryeyes/shared';
 import type { ISimulationBridge } from './bridge.ts';
+import { useGameStore } from './client/hud/store.ts';
 
 interface JoinResponse {
   sessionToken: string;
@@ -29,6 +31,7 @@ interface JoinResponse {
   playerId: string;
   playerName: string;
   gameTime: number;
+  systemIndex: number;
 }
 
 interface BodiesResponse {
@@ -53,6 +56,7 @@ export class RemoteBridge implements ISimulationBridge {
   private soiTable: SOIEntry[] = [];
   private _soiParentId = 'sol'; // default; updated after connect
   private starInfoMap = new Map<string, StarInfo>();
+  currentSystemIndex = 0;
 
   constructor(serverUrl = '', heartbeatIntervalMs = 1000) {
     this.heartbeatIntervalMs = heartbeatIntervalMs;
@@ -96,6 +100,7 @@ export class RemoteBridge implements ISimulationBridge {
     this.shipId = join.shipId;
     this.lastServerGameTime = join.gameTime;
     this.lastSnapshotRealTime = performance.now();
+    this.currentSystemIndex = join.systemIndex ?? 0;
 
     // 2. Fetch body definitions
     const bodiesRes = await fetch(`${this.serverUrl}/api/bodies`);
@@ -158,6 +163,26 @@ export class RemoteBridge implements ISimulationBridge {
         });
         break;
     }
+  }
+
+  async jumpGate(targetSystemIndex: number): Promise<void> {
+    await fetch(`${this.serverUrl}/api/commands/jump-gate`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${this.sessionToken}`,
+      },
+      body: JSON.stringify({ targetSystemIndex }),
+    });
+  }
+
+  async getGateConnections(): Promise<GateConnectionInfo[]> {
+    const res = await fetch(`${this.serverUrl}/api/gate-connections`, {
+      headers: { 'Authorization': `Bearer ${this.sessionToken}` },
+    });
+    if (!res.ok) return [];
+    const data = await res.json() as { connections: GateConnectionInfo[]; systemIndex: number };
+    return data.connections;
   }
 
   // ── Local interpolation ──────────────────────────────────────────
@@ -331,16 +356,35 @@ export class RemoteBridge implements ISimulationBridge {
       }
 
       case 'SHIP_ROUTE_CHANGED':
-      case 'SHIP_ARRIVED':
       case 'SHIP_CANCELLED': {
         const data = msg.data as { ship: ShipSnapshot };
-        // Re-anchor time to server's gameTime to prevent drift
         this.lastServerGameTime = msg.gameTime;
         this.lastSnapshotRealTime = performance.now();
         this.lastShips = this.lastShips.map(s =>
           s.id === data.ship.id ? data.ship : s,
         );
         this.pushInterpolatedSnapshot();
+        break;
+      }
+
+      case 'SHIP_ARRIVED': {
+        const data = msg.data as { ship: ShipSnapshot };
+        this.lastServerGameTime = msg.gameTime;
+        this.lastSnapshotRealTime = performance.now();
+        this.lastShips = this.lastShips.map(s =>
+          s.id === data.ship.id ? data.ship : s,
+        );
+        this.pushInterpolatedSnapshot();
+
+        // Auto-open gate dialog if arrived at a gate
+        if (data.ship.id === this.shipId && data.ship.orbitBodyId) {
+          const gateBody = this.bodies.find(b => b.id === data.ship.orbitBodyId && b.type === 'gate');
+          if (gateBody) {
+            this.getGateConnections().then(connections => {
+              useGameStore.getState().showGateDialog(gateBody.id, connections);
+            });
+          }
+        }
         break;
       }
 
@@ -361,7 +405,8 @@ export class RemoteBridge implements ISimulationBridge {
       }
 
       case 'SYSTEM_CHANGED': {
-        const data = msg.data as { seed: number; snapshot: SystemSnapshot };
+        const data = msg.data as { seed: number; systemIndex?: number; snapshot: SystemSnapshot };
+        if (data.systemIndex != null) this.currentSystemIndex = data.systemIndex;
         // Refresh body definitions from the new snapshot
         this.bodies = data.snapshot.bodies.map(b => ({
           id: b.id,

@@ -13,39 +13,51 @@ import {
   bodyVelocityAtTime as bodyVelocityAtTimeHelper,
   transitPositionAtTime, sampleRouteAhead,
   computeRoute, brachistochroneFuelCost,
-  createDefaultBodies, createPlayerShip,
   SHIP_FUEL_CAPACITY,
   SHIP_MAX_ACCELERATION,
   SHIP_FUEL_CONSUMPTION_RATE,
   ORBIT_VISUAL_RADIUS,
   ORBIT_VISUAL_SPEED,
   generateSystem, systemToBodies, findStartingBody,
+  getSystemSeed, getGateConnections, getGateConnectionInfo,
   TIME_COMPRESSION,
 } from '@starryeyes/shared';
-import type { GeneratedSystem } from '@starryeyes/shared';
+import type { GeneratedSystem, GateConnectionInfo } from '@starryeyes/shared';
 import { TICK_RATE_MS } from './config.js';
 import type { SessionStore } from './session.js';
 import {
   EVENT_SHIP_ROUTE_CHANGED,
   EVENT_SHIP_ARRIVED,
   EVENT_SHIP_CANCELLED,
+  EVENT_PLAYER_JOINED,
+  EVENT_PLAYER_LEFT,
 } from './ws/events.js';
 
-export class GameServer {
+interface CachedSystem {
+  system: GeneratedSystem;
   bodies: CelestialBody[];
+}
+
+export class GameServer {
   ships: ShipState[] = [];
   gameTime = 0;
-  bodyPositions: Map<string, Vec2> = new Map();
-  generatedSystem: GeneratedSystem | null = null;
+
+  // Per-system state
+  worldSeed: number = 42;
+  private systemCache = new Map<number, CachedSystem>();
+  playerSystems = new Map<string, number>(); // shipId → system index
+  private bodyPositionsPerSystem = new Map<number, Map<string, Vec2>>();
 
   private tickInterval: ReturnType<typeof setInterval> | null = null;
   private lastTickTime = 0;
   private broadcastFn: (message: string) => void;
+  private sessions: SessionStore;
 
-  constructor(_sessions: SessionStore, broadcastFn: (message: string) => void) {
+  constructor(sessions: SessionStore, broadcastFn: (message: string) => void) {
     this.broadcastFn = broadcastFn;
-    this.bodies = createDefaultBodies();
-    this.updateBodyPositions();
+    this.sessions = sessions;
+    // Initialize default system at index 0
+    this.getOrGenerateSystem(0);
   }
 
   start(): void {
@@ -61,27 +73,56 @@ export class GameServer {
     }
   }
 
+  // ── System management ──────────────────────────────────────────────
+
+  getOrGenerateSystem(index: number): CachedSystem {
+    let cached = this.systemCache.get(index);
+    if (cached) return cached;
+
+    const seed = getSystemSeed(this.worldSeed, index);
+    const system = generateSystem(seed);
+    const bodies = systemToBodies(system, this.gameTime);
+    cached = { system, bodies };
+    this.systemCache.set(index, cached);
+
+    // Initialize body positions
+    const positions = new Map<string, Vec2>();
+    this.bodyPositionsPerSystem.set(index, positions);
+    this.updateBodyPositionsForSystem(index);
+
+    return cached;
+  }
+
+  getBodiesForSystem(systemIndex: number): CelestialBody[] {
+    return this.getOrGenerateSystem(systemIndex).bodies;
+  }
+
+  getGeneratedSystemFor(systemIndex: number): GeneratedSystem {
+    return this.getOrGenerateSystem(systemIndex).system;
+  }
+
+  private getSystemIndexForShip(shipId: string): number {
+    return this.playerSystems.get(shipId) ?? 0;
+  }
+
   // ── Ship management ──────────────────────────────────────────────
 
-  addShip(shipId: string): ShipState {
-    if (this.generatedSystem) {
-      const startBodyId = findStartingBody(this.generatedSystem);
-      const ship = this.createShipAtBody(shipId, startBodyId);
-      this.ships.push(ship);
-      return ship;
-    }
-    const ship = createPlayerShip(this.bodies, this.gameTime, shipId);
+  addShip(shipId: string, systemIndex = 0): ShipState {
+    this.playerSystems.set(shipId, systemIndex);
+    const cached = this.getOrGenerateSystem(systemIndex);
+    const startBodyId = findStartingBody(cached.system);
+    const ship = this.createShipAtBody(shipId, startBodyId, systemIndex);
     this.ships.push(ship);
     return ship;
   }
 
-  private createShipAtBody(shipId: string, bodyId: string | null): ShipState {
+  private createShipAtBody(shipId: string, bodyId: string | null, systemIndex: number): ShipState {
     let position: Vec2;
     let mode: 'orbit' | 'drift' = 'drift';
     let orbitBodyId: string | null = null;
 
     if (bodyId) {
-      const bodyPos = this.getBodyPosition(bodyId);
+      const bodyPos = this.getBodyPosition(bodyId, systemIndex);
       position = vec2Add(bodyPos, vec2(ORBIT_VISUAL_RADIUS, 0));
       mode = 'orbit';
       orbitBodyId = bodyId;
@@ -106,24 +147,28 @@ export class GameServer {
 
   removeShip(shipId: string): void {
     this.ships = this.ships.filter(s => s.id !== shipId);
+    this.playerSystems.delete(shipId);
   }
 
   // ── Body position helpers ────────────────────────────────────────
 
-  getBodyPosition(bodyId: string): Vec2 {
-    const body = this.bodies.find(b => b.id === bodyId);
+  getBodyPosition(bodyId: string, systemIndex: number): Vec2 {
+    const bodies = this.getBodiesForSystem(systemIndex);
+    const body = bodies.find(b => b.id === bodyId);
     if (body && body.type === 'star') return Vec2Zero;
-    return this.bodyPositions.get(bodyId) ?? Vec2Zero;
+    const positions = this.bodyPositionsPerSystem.get(systemIndex);
+    return positions?.get(bodyId) ?? Vec2Zero;
   }
 
-  bodyPositionAtTime(bodyId: string, t: number): Vec2 {
-    const body = this.bodies.find(b => b.id === bodyId);
+  bodyPositionAtTime(bodyId: string, t: number, systemIndex: number): Vec2 {
+    const bodies = this.getBodiesForSystem(systemIndex);
+    const body = bodies.find(b => b.id === bodyId);
     if (!body || !body.elements) return Vec2Zero;
 
     if (body.parentId) {
-      const parent = this.bodies.find(b => b.id === body.parentId);
+      const parent = bodies.find(b => b.id === body.parentId);
       if (parent && parent.type !== 'star') {
-        const parentPos = this.bodyPositionAtTime(body.parentId, t);
+        const parentPos = this.bodyPositionAtTime(body.parentId, t, systemIndex);
         const localPos = keplerPositionAtTime(body.elements, t);
         return vec2Add(parentPos, localPos);
       }
@@ -132,48 +177,71 @@ export class GameServer {
     return keplerPositionAtTime(body.elements, t);
   }
 
-  bodyVelocityAtTime(bodyId: string, t: number): Vec2 {
-    return bodyVelocityAtTimeHelper(bodyId, t, this.bodies, (id, time) => this.bodyPositionAtTime(id, time));
+  bodyVelocityAtTime(bodyId: string, t: number, systemIndex: number): Vec2 {
+    const bodies = this.getBodiesForSystem(systemIndex);
+    return bodyVelocityAtTimeHelper(bodyId, t, bodies, (id, time) => this.bodyPositionAtTime(id, time, systemIndex));
   }
 
-  private updateBodyPositions(): void {
-    for (const body of this.bodies) {
+  private updateBodyPositionsForSystem(systemIndex: number): void {
+    const cached = this.systemCache.get(systemIndex);
+    if (!cached) return;
+    let positions = this.bodyPositionsPerSystem.get(systemIndex);
+    if (!positions) {
+      positions = new Map();
+      this.bodyPositionsPerSystem.set(systemIndex, positions);
+    }
+
+    for (const body of cached.bodies) {
       if (body.elements === null) {
-        this.bodyPositions.set(body.id, Vec2Zero);
+        positions.set(body.id, Vec2Zero);
       } else if (body.parentId) {
-        const parent = this.bodies.find(b => b.id === body.parentId);
+        const parent = cached.bodies.find(b => b.id === body.parentId);
         if (parent && parent.type !== 'star') {
-          const parentPos = this.bodyPositions.get(body.parentId) ?? Vec2Zero;
+          const parentPos = positions.get(body.parentId) ?? Vec2Zero;
           const localPos = keplerPositionAtTime(body.elements, this.gameTime);
-          this.bodyPositions.set(body.id, vec2Add(parentPos, localPos));
+          positions.set(body.id, vec2Add(parentPos, localPos));
         } else {
-          this.bodyPositions.set(body.id, keplerPositionAtTime(body.elements, this.gameTime));
+          positions.set(body.id, keplerPositionAtTime(body.elements, this.gameTime));
         }
       }
+    }
+  }
+
+  private updateAllActiveBodyPositions(): void {
+    // Only update systems that have players
+    const activeSystems = new Set<number>();
+    for (const sysIndex of this.playerSystems.values()) {
+      activeSystems.add(sysIndex);
+    }
+    for (const sysIndex of activeSystems) {
+      this.updateBodyPositionsForSystem(sysIndex);
     }
   }
 
   // ── System randomization ────────────────────────────────────────
 
   randomizeSystem(seed?: number): { seed: number; starName: string; planetCount: number; bodies: CelestialBody[] } {
-    const actualSeed = seed ?? Math.floor(Math.random() * 0xFFFFFFFF);
-    const system = generateSystem(actualSeed);
-    this.generatedSystem = system;
-    this.bodies = systemToBodies(system, this.gameTime);
-    this.updateBodyPositions();
+    this.worldSeed = seed ?? Math.floor(Math.random() * 0xFFFFFFFF);
+    this.systemCache.clear();
+    this.bodyPositionsPerSystem.clear();
 
-    // Reposition all ships
-    const startBodyId = findStartingBody(system);
+    // Reset all players to system 0
+    for (const ship of this.ships) {
+      this.playerSystems.set(ship.id, 0);
+    }
+
+    const cached = this.getOrGenerateSystem(0);
+    const startBodyId = findStartingBody(cached.system);
+
     for (const ship of this.ships) {
       if (startBodyId) {
-        const bodyPos = this.getBodyPosition(startBodyId);
+        const bodyPos = this.getBodyPosition(startBodyId, 0);
         ship.position = vec2Add(bodyPos, vec2(ORBIT_VISUAL_RADIUS, 0));
         ship.mode = 'orbit';
         ship.orbitBodyId = startBodyId;
         ship.orbitAngle = 0;
       } else {
-        // No planets — place in drift at 2 AU * sqrt(luminosity)
-        const dist = 2 * 1.496e11 * Math.sqrt(system.star.luminositySolar);
+        const dist = 2 * 1.496e11 * Math.sqrt(cached.system.star.luminositySolar);
         ship.position = vec2(dist, 0);
         ship.mode = 'drift';
         ship.orbitBodyId = null;
@@ -183,18 +251,24 @@ export class GameServer {
       ship.fuel = SHIP_FUEL_CAPACITY;
     }
 
-    // Broadcast full refresh
+    // Broadcast full refresh to all
     this.broadcast('SYSTEM_CHANGED', {
-      seed: actualSeed,
-      snapshot: this.snapshot(),
+      seed: this.worldSeed,
+      snapshot: this.snapshotForSystem(0),
     });
 
     return {
-      seed: actualSeed,
-      starName: system.star.name,
-      planetCount: system.planets.length,
-      bodies: this.bodies,
+      seed: this.worldSeed,
+      starName: cached.system.star.name,
+      planetCount: cached.system.planets.length,
+      bodies: cached.bodies,
     };
+  }
+
+  // ── Gate connections ────────────────────────────────────────────
+
+  getGateConnectionsForSystem(systemIndex: number): GateConnectionInfo[] {
+    return getGateConnectionInfo(this.worldSeed, systemIndex);
   }
 
   // ── Commands ─────────────────────────────────────────────────────
@@ -204,19 +278,21 @@ export class GameServer {
       case 'SET_DESTINATION': {
         const ship = this.ships.find(s => s.id === cmd.shipId);
         if (!ship) return {};
+        const sysIndex = this.getSystemIndexForShip(cmd.shipId);
+        const bodies = this.getBodiesForSystem(sysIndex);
 
         // If orbiting, inject body velocity so computeRoute sees initial speed
         const savedVelocity = ship.velocity;
         if (ship.mode === 'orbit' && ship.orbitBodyId) {
-          ship.velocity = this.bodyVelocityAtTime(ship.orbitBodyId, this.gameTime);
+          ship.velocity = this.bodyVelocityAtTime(ship.orbitBodyId, this.gameTime, sysIndex);
         }
 
         const route = computeRoute(
           ship,
           cmd.destination,
           this.gameTime,
-          this.bodies,
-          (bodyId, t) => this.bodyPositionAtTime(bodyId, t),
+          bodies,
+          (bodyId, t) => this.bodyPositionAtTime(bodyId, t, sysIndex),
           cmd.acceleration,
         );
         if (!route) {
@@ -240,7 +316,7 @@ export class GameServer {
         ship.mode = 'transit';
         ship.orbitBodyId = null;
 
-        this.broadcast(EVENT_SHIP_ROUTE_CHANGED, {
+        this.broadcastToSystem(sysIndex, EVENT_SHIP_ROUTE_CHANGED, {
           ship: this.shipSnapshot(ship),
         });
 
@@ -255,9 +331,9 @@ export class GameServer {
       case 'CANCEL_ROUTE': {
         const ship = this.ships.find(s => s.id === cmd.shipId);
         if (!ship) return {};
+        const sysIndex = this.getSystemIndexForShip(cmd.shipId);
 
         if (ship.mode === 'transit' && ship.route) {
-          // Settle fuel at cancellation time
           const elapsed = this.gameTime - ship.route.startTime;
           ship.fuel = ship.route.fuelAtRouteStart - ship.route.fuelConsumptionRate * elapsed;
           const result = transitPositionAtTime(ship.route, this.gameTime);
@@ -275,7 +351,7 @@ export class GameServer {
           ship.orbitBodyId = null;
         }
 
-        this.broadcast(EVENT_SHIP_CANCELLED, {
+        this.broadcastToSystem(sysIndex, EVENT_SHIP_CANCELLED, {
           ship: this.shipSnapshot(ship),
         });
 
@@ -285,33 +361,100 @@ export class GameServer {
       case 'UNDOCK': {
         const ship = this.ships.find(s => s.id === cmd.shipId);
         if (!ship) return {};
+        const sysIndex = this.getSystemIndexForShip(cmd.shipId);
         if (ship.mode === 'orbit' && ship.orbitBodyId) {
           ship.mode = 'drift';
-          ship.velocity = this.bodyVelocityAtTime(ship.orbitBodyId, this.gameTime);
+          ship.velocity = this.bodyVelocityAtTime(ship.orbitBodyId, this.gameTime, sysIndex);
           ship.orbitBodyId = null;
         }
         return { ship: this.shipSnapshot(ship) };
       }
 
+      case 'JUMP_GATE': {
+        return this.processJumpGate(cmd.shipId, cmd.targetSystemIndex);
+      }
     }
+  }
+
+  private processJumpGate(shipId: string, targetSystemIndex: number): { ship?: ShipSnapshot } {
+    const ship = this.ships.find(s => s.id === shipId);
+    if (!ship) return {};
+
+    const currentIndex = this.getSystemIndexForShip(shipId);
+    const currentBodies = this.getBodiesForSystem(currentIndex);
+
+    // Verify ship is orbiting the gate
+    const gateBody = currentBodies.find(b => b.type === 'gate');
+    if (!gateBody || ship.orbitBodyId !== gateBody.id) {
+      return {}; // Not at gate
+    }
+
+    // Verify target is a valid connection
+    const connections = getGateConnections(this.worldSeed, currentIndex);
+    if (!connections.includes(targetSystemIndex)) {
+      return {}; // Invalid destination
+    }
+
+    // Generate/cache target system
+    const targetCached = this.getOrGenerateSystem(targetSystemIndex);
+    const targetGate = targetCached.bodies.find(b => b.type === 'gate');
+
+    // Place ship at target gate
+    if (targetGate) {
+      const gatePos = this.getBodyPosition(targetGate.id, targetSystemIndex);
+      ship.position = vec2Add(gatePos, vec2(ORBIT_VISUAL_RADIUS, 0));
+      ship.orbitBodyId = targetGate.id;
+    } else {
+      ship.position = vec2(2 * 1.496e11, 0);
+      ship.orbitBodyId = null;
+    }
+    ship.mode = 'orbit';
+    ship.velocity = Vec2Zero;
+    ship.route = null;
+    ship.orbitAngle = 0;
+
+    // Broadcast PLAYER_LEFT to old system
+    this.broadcastToSystem(currentIndex, EVENT_PLAYER_LEFT, {
+      shipId,
+    });
+
+    // Update system tracking
+    this.playerSystems.set(shipId, targetSystemIndex);
+
+    // Send SYSTEM_CHANGED to jumping player only
+    this.sendToPlayer(shipId, 'SYSTEM_CHANGED', {
+      seed: getSystemSeed(this.worldSeed, targetSystemIndex),
+      systemIndex: targetSystemIndex,
+      snapshot: this.snapshotForSystem(targetSystemIndex),
+    });
+
+    // Broadcast PLAYER_JOINED to new system
+    this.broadcastToSystem(targetSystemIndex, EVENT_PLAYER_JOINED, {
+      shipId,
+      ship: this.shipSnapshot(ship),
+    });
+
+    return { ship: this.shipSnapshot(ship) };
   }
 
   // ── Tick loop ────────────────────────────────────────────────────
 
   private tick(): void {
     const now = performance.now();
-    const realDt = (now - this.lastTickTime) / 1000; // actual seconds elapsed
+    const realDt = (now - this.lastTickTime) / 1000;
     this.lastTickTime = now;
 
     const gameDt = realDt * TIME_COMPRESSION;
     this.gameTime += gameDt;
-    this.updateBodyPositions();
+    this.updateAllActiveBodyPositions();
 
     for (const ship of this.ships) {
+      const sysIndex = this.getSystemIndexForShip(ship.id);
+
       // Update orbiting ships
       if (ship.mode === 'orbit' && ship.orbitBodyId) {
         ship.orbitAngle += ORBIT_VISUAL_SPEED * realDt;
-        const bodyPos = this.getBodyPosition(ship.orbitBodyId);
+        const bodyPos = this.getBodyPosition(ship.orbitBodyId, sysIndex);
         ship.position = vec2Add(bodyPos, vec2(
           ORBIT_VISUAL_RADIUS * Math.cos(ship.orbitAngle),
           ORBIT_VISUAL_RADIUS * Math.sin(ship.orbitAngle),
@@ -330,10 +473,9 @@ export class GameServer {
         ship.fuel = ship.route.fuelAtRouteStart - ship.route.fuelConsumptionRate * elapsed;
 
         if (elapsed >= ship.route.totalTime) {
-          // Final fuel value at end of route
           ship.fuel = ship.route.fuelAtRouteStart - ship.route.fuelConsumptionRate * ship.route.totalTime;
           if (ship.route.targetBodyId) {
-            const bodyPos = this.getBodyPosition(ship.route.targetBodyId);
+            const bodyPos = this.getBodyPosition(ship.route.targetBodyId, sysIndex);
             ship.position = vec2Add(bodyPos, vec2(ORBIT_VISUAL_RADIUS, 0));
             ship.mode = 'orbit';
             ship.orbitBodyId = ship.route.targetBodyId;
@@ -345,7 +487,7 @@ export class GameServer {
           ship.velocity = Vec2Zero;
           ship.route = null;
 
-          this.broadcast(EVENT_SHIP_ARRIVED, {
+          this.broadcastToSystem(sysIndex, EVENT_SHIP_ARRIVED, {
             ship: this.shipSnapshot(ship),
           });
         }
@@ -356,6 +498,9 @@ export class GameServer {
   // ── Snapshots ────────────────────────────────────────────────────
 
   shipSnapshot(ship: ShipState): ShipSnapshot {
+    const sysIndex = this.getSystemIndexForShip(ship.id);
+    const bodies = this.getBodiesForSystem(sysIndex);
+
     let isDecelerating = false;
     let heading: Vec2 = vec2(1, 0);
 
@@ -370,7 +515,7 @@ export class GameServer {
     let destinationName: string | null = null;
     if (ship.route) {
       if (ship.route.targetBodyId) {
-        const body = this.bodies.find(b => b.id === ship.route!.targetBodyId);
+        const body = bodies.find(b => b.id === ship.route!.targetBodyId);
         destinationName = body ? body.name : ship.route.targetBodyId;
       } else {
         destinationName = 'SPACE';
@@ -403,38 +548,77 @@ export class GameServer {
     };
   }
 
-  snapshot(): SystemSnapshot {
+  snapshotForSystem(systemIndex: number): SystemSnapshot {
+    const cached = this.getOrGenerateSystem(systemIndex);
+    const positions = this.bodyPositionsPerSystem.get(systemIndex) ?? new Map();
+
+    const systemShips = this.ships.filter(s =>
+      (this.playerSystems.get(s.id) ?? 0) === systemIndex
+    );
+
     return {
       gameTime: this.gameTime,
-      bodies: this.bodies.map(b => ({
+      bodies: cached.bodies.map(b => ({
         id: b.id,
         name: b.name,
         type: b.type,
         mass: b.mass,
-        position: this.bodyPositions.get(b.id) ?? Vec2Zero,
+        position: positions.get(b.id) ?? Vec2Zero,
         radius: b.radius,
         color: b.color,
         elements: b.elements,
         parentId: b.parentId,
         planetClass: b.planetClass,
-        ...(b.type === 'star' && this.generatedSystem ? {
+        ...(b.type === 'star' ? {
           starInfo: {
-            spectralClass: this.generatedSystem.star.spectralClass,
-            spectralSubclass: this.generatedSystem.star.spectralSubclass,
-            luminosityClass: this.generatedSystem.star.luminosityClass,
-            surfaceTemperature: this.generatedSystem.star.surfaceTemperature,
-            luminositySolar: this.generatedSystem.star.luminositySolar,
-            massSolar: this.generatedSystem.star.mass / 1.989e30,
-            age: this.generatedSystem.star.age,
+            spectralClass: cached.system.star.spectralClass,
+            spectralSubclass: cached.system.star.spectralSubclass,
+            luminosityClass: cached.system.star.luminosityClass,
+            surfaceTemperature: cached.system.star.surfaceTemperature,
+            luminositySolar: cached.system.star.luminositySolar,
+            massSolar: cached.system.star.mass / 1.989e30,
+            age: cached.system.star.age,
           },
         } : {}),
       })),
-      ships: this.ships.map(s => this.shipSnapshot(s)),
+      ships: systemShips.map(s => this.shipSnapshot(s)),
     };
   }
+
+  // Legacy snapshot: uses player's system or system 0
+  snapshot(): SystemSnapshot {
+    return this.snapshotForSystem(0);
+  }
+
+  snapshotForPlayer(shipId: string): SystemSnapshot {
+    const sysIndex = this.getSystemIndexForShip(shipId);
+    return this.snapshotForSystem(sysIndex);
+  }
+
+  // ── Broadcasting ──────────────────────────────────────────────────
 
   private broadcast(type: string, data: unknown): void {
     const message = JSON.stringify({ type, gameTime: this.gameTime, data });
     this.broadcastFn(message);
+  }
+
+  broadcastToSystem(systemIndex: number, type: string, data: unknown): void {
+    const message = JSON.stringify({ type, gameTime: this.gameTime, data });
+    for (const session of this.sessions.allConnected()) {
+      const shipSysIndex = this.playerSystems.get(session.shipId) ?? 0;
+      if (shipSysIndex === systemIndex && session.ws && session.ws.readyState === 1) {
+        session.ws.send(message);
+      }
+    }
+  }
+
+  private sendToPlayer(shipId: string, type: string, data: unknown): void {
+    const message = JSON.stringify({ type, gameTime: this.gameTime, data });
+    for (const session of this.sessions.allConnected()) {
+      if (session.shipId === shipId && session.ws && session.ws.readyState === 1) {
+        session.ws.send(message);
+        break;
+      }
+    }
   }
 }

@@ -1,0 +1,114 @@
+.gate-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal-backdrop);
+  background: var(--bg-backdrop);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.gate-dialog {
+  z-index: var(--z-modal);
+  background: var(--bg-deep);
+  border: 1px solid var(--border-accent);
+  border-radius: var(--panel-radius);
+  padding: 16px 20px;
+  min-width: 280px;
+  max-width: 340px;
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+}
+
+.gate-dialog-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.gate-dialog-title {
+  color: #00ffaa;
+  font-size: var(--font-size-md);
+  font-weight: bold;
+}
+
+.gate-dialog-label {
+  color: var(--text-label);
+  font-size: var(--font-size-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.gate-dialog-connections {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.gate-dialog-connection {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 8px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--panel-radius);
+  transition: border-color var(--transition-speed);
+}
+
+.gate-dialog-connection:hover {
+  border-color: #00ffaa;
+}
+
+.gate-dialog-system-name {
+  color: var(--text-bright);
+  font-size: var(--font-size-sm);
+}
+
+.gate-dialog-btn-jump {
+  padding: 3px 10px;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs, 10px);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  border: 1px solid #00ffaa;
+  border-radius: var(--panel-radius);
+  cursor: pointer;
+  background: transparent;
+  color: #00ffaa;
+  transition: background var(--transition-speed);
+}
+
+.gate-dialog-btn-jump:hover {
+  background: rgba(0, 255, 170, 0.15);
+}
+
+.gate-dialog-close {
+  display: flex;
+  justify-content: center;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.gate-dialog-btn-close {
+  padding: 6px 24px;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  border: 1px solid var(--border-medium);
+  border-radius: var(--panel-radius);
+  cursor: pointer;
+  background: transparent;
+  color: var(--text-label);
+  transition: background var(--transition-speed), border-color var(--transition-speed);
+}
+
+.gate-dialog-btn-close:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-accent);
+}

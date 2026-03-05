@@ -1,16 +1,28 @@
 import { Router } from 'express';
 import type { GameServer } from '../GameServer.js';
 import type { SessionStore } from '../session.js';
+import { extractToken } from './auth.js';
 
 export function stateRoutes(game: GameServer, sessions: SessionStore): Router {
   const router = Router();
 
-  router.get('/state', (_req, res) => {
-    res.json(game.snapshot());
+  router.get('/state', (req, res) => {
+    const token = extractToken(req.headers.authorization);
+    const session = token ? sessions.get(token) : null;
+    if (session) {
+      res.json(game.snapshotForPlayer(session.shipId));
+    } else {
+      res.json(game.snapshot());
+    }
   });
 
-  router.get('/bodies', (_req, res) => {
-    const bodies = game.bodies.map(b => ({
+  router.get('/bodies', (req, res) => {
+    const token = extractToken(req.headers.authorization);
+    const session = token ? sessions.get(token) : null;
+    const sysIndex = session ? (game.playerSystems.get(session.shipId) ?? 0) : 0;
+    const systemBodies = game.getBodiesForSystem(sysIndex);
+
+    const bodies = systemBodies.map(b => ({
       id: b.id,
       name: b.name,
       type: b.type,
@@ -31,11 +43,10 @@ export function stateRoutes(game: GameServer, sessions: SessionStore): Router {
   // On-demand detail for a single body (procgen data)
   router.get('/bodies/:id/detail', (req, res) => {
     const id = req.params.id;
-    const sys = game.generatedSystem;
-    if (!sys) {
-      res.status(404).json({ error: 'No generated system' });
-      return;
-    }
+    const token = extractToken(req.headers.authorization);
+    const session = token ? sessions.get(token) : null;
+    const sysIndex = session ? (game.playerSystems.get(session.shipId) ?? 0) : 0;
+    const sys = game.getGeneratedSystemFor(sysIndex);
 
     // Star
     if (sys.star.id === id) {
@@ -46,7 +57,6 @@ export function stateRoutes(game: GameServer, sessions: SessionStore): Router {
     // Planets
     for (const planet of sys.planets) {
       if (planet.id === id) {
-        // Strip full moon data, return only id/name list
         const { moons, ...rest } = planet;
         res.json({
           type: 'planet',
@@ -78,7 +88,7 @@ export function stateRoutes(game: GameServer, sessions: SessionStore): Router {
     res.status(404).json({ error: 'Body not found' });
   });
 
-  // Lightweight sync endpoint — returns server gameTime + the player's ship
+  // Lightweight sync endpoint
   router.get('/sync', (req, res) => {
     const auth = req.headers.authorization;
     if (!auth?.startsWith('Bearer ')) {
@@ -95,6 +105,23 @@ export function stateRoutes(game: GameServer, sessions: SessionStore): Router {
       gameTime: game.gameTime,
       ship: ship ? game.shipSnapshot(ship) : null,
     });
+  });
+
+  // Gate connections for current system
+  router.get('/gate-connections', (req, res) => {
+    const auth = req.headers.authorization;
+    if (!auth?.startsWith('Bearer ')) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+    const session = sessions.get(auth.slice(7));
+    if (!session) {
+      res.status(401).json({ error: 'Invalid session' });
+      return;
+    }
+    const sysIndex = game.playerSystems.get(session.shipId) ?? 0;
+    const connections = game.getGateConnectionsForSystem(sysIndex);
+    res.json({ connections, systemIndex: sysIndex });
   });
 
   return router;

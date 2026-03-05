@@ -72,5 +72,27 @@ export function commandRoutes(sessions: SessionStore, game: GameServer): Router 
     res.json({ ship: result.ship ?? null });
   });
 
+  router.post('/jump-gate', (req, res) => {
+    const session = (req as unknown as { session: { shipId: string } }).session;
+    const { targetSystemIndex } = req.body as { targetSystemIndex: number };
+    if (targetSystemIndex == null || typeof targetSystemIndex !== 'number') {
+      res.status(400).json({ error: 'Missing targetSystemIndex' });
+      return;
+    }
+
+    const result = game.processCommand({
+      type: 'JUMP_GATE',
+      shipId: session.shipId,
+      targetSystemIndex,
+    });
+
+    if (!result.ship) {
+      res.status(400).json({ error: 'Jump failed (not at gate or invalid destination)' });
+      return;
+    }
+
+    res.json({ ship: result.ship });
+  });
+
   return router;
 }

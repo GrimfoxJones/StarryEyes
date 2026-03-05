@@ -1,10 +1,11 @@
 import { create } from 'zustand';
 import type { SystemSnapshot, Destination } from '@starryeyes/shared';
+import type { GateConnectionInfo } from '@starryeyes/shared';
 import type { ISimulationBridge } from '../../bridge.ts';
 import { TAB_DEFAULTS } from './left-panel/tabConfig.ts';
 
 export type PrimaryTab = 'SYS' | 'CREW' | 'OPS' | 'DOCK';
-export type ObjectType = 'star' | 'planet' | 'moon' | 'asteroid' | 'station' | 'ship';
+export type ObjectType = 'star' | 'planet' | 'moon' | 'asteroid' | 'station' | 'gate' | 'ship';
 
 export interface PopupState {
   objectId: string;
@@ -22,6 +23,11 @@ export interface TravelDialogState {
   destination: Destination;
   targetName: string;
   accelerationG: number;
+}
+
+export interface GateDialogState {
+  gateBodyId: string;
+  connections: GateConnectionInfo[];
 }
 
 interface GameState {
@@ -59,6 +65,11 @@ interface GameState {
   showTravelDialog: (state: TravelDialogState) => void;
   dismissTravelDialog: () => void;
   setTravelAcceleration: (g: number) => void;
+
+  // Gate dialog
+  gateDialog: GateDialogState | null;
+  showGateDialog: (gateBodyId: string, connections: GateConnectionInfo[]) => void;
+  dismissGateDialog: () => void;
 }
 
 export const useGameStore = create<GameState>((set) => ({
@@ -96,4 +107,9 @@ export const useGameStore = create<GameState>((set) => ({
   showTravelDialog: (state) => set({ travelDialog: state }),
   dismissTravelDialog: () => set({ travelDialog: null }),
   setTravelAcceleration: (g) => set((s) => s.travelDialog ? { travelDialog: { ...s.travelDialog, accelerationG: g } } : {}),
+
+  // Gate dialog
+  gateDialog: null,
+  showGateDialog: (gateBodyId, connections) => set({ gateDialog: { gateBodyId, connections } }),
+  dismissGateDialog: () => set({ gateDialog: null }),
 }));

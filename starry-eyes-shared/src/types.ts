@@ -74,7 +74,7 @@ export interface OrbitalElements {
 
 // ── Celestial Body ──────────────────────────────────────────────────
 
-export type BodyType = 'star' | 'planet' | 'moon' | 'asteroid' | 'station';
+export type BodyType = 'star' | 'planet' | 'moon' | 'asteroid' | 'station' | 'gate';
 
 export interface CelestialBody {
   readonly id: string;
@@ -181,4 +181,5 @@ export interface SystemSnapshot {
 export type PlayerCommand =
   | { readonly type: 'SET_DESTINATION'; readonly shipId: string; readonly destination: Destination; readonly acceleration?: number }
   | { readonly type: 'CANCEL_ROUTE'; readonly shipId: string }
-  | { readonly type: 'UNDOCK'; readonly shipId: string };
+  | { readonly type: 'UNDOCK'; readonly shipId: string }
+  | { readonly type: 'JUMP_GATE'; readonly shipId: string; readonly targetSystemIndex: number };

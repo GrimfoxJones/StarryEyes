@@ -3,6 +3,7 @@ import { useGameStore } from './store.ts';
 import { LeftPanel } from './left-panel/LeftPanel.tsx';
 import { DetailModal } from './modals/DetailModal.tsx';
 import { TravelDialog } from './dialogs/TravelDialog.tsx';
+import { GateDialog } from './dialogs/GateDialog.tsx';
 import { formatGameTime, formatSpeed, formatEta } from './format.ts';
 import { TIME_COMPRESSION } from '@starryeyes/shared';
 import './theme.css';
@@ -39,6 +40,11 @@ export function HudOverlay() {
   if (!snapshot) return null;
 
   const ship = snapshot.ships[0];
+
+  // Derive current system name from the star body in snapshot
+  const starBody = snapshot.bodies.find(b => b.type === 'star');
+  const currentSystemName = starBody?.name ?? systemInfo?.starName ?? null;
+  const currentSeed = systemInfo?.seed ?? null;
 
   return (
     <div className="hud">
@@ -103,18 +109,18 @@ export function HudOverlay() {
         </div>
       )}
 
-      {/* Bottom-right: Seed / Randomize */}
+      {/* Bottom-right: System info / Randomize */}
       <div className="hud-panel hud-bottom-right">
-        {systemInfo && (
+        {currentSystemName && (
           <div className="hud-row">
             <span className="hud-label">SYSTEM</span>
-            <span className="hud-value">{systemInfo.starName}</span>
+            <span className="hud-value">{currentSystemName}</span>
           </div>
         )}
-        {systemInfo && (
+        {currentSeed != null && (
           <div className="hud-row">
             <span className="hud-label">SEED</span>
-            <span className="hud-value hud-dim">{systemInfo.seed}</span>
+            <span className="hud-value hud-dim">{currentSeed}</span>
           </div>
         )}
         <div className="hud-row" style={{ gap: '4px', marginTop: '4px' }}>
@@ -133,6 +139,7 @@ export function HudOverlay() {
       {/* Detail modal */}
       <DetailModal />
       <TravelDialog />
+      <GateDialog />
     </div>
   );
 }
