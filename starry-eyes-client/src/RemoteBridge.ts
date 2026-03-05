@@ -15,7 +15,10 @@ import {
   vec2Length,
   vec2Normalize,
   sampleRouteAhead,
+  buildSOITable,
+  determineSOIParent,
 } from '@starryeyes/shared';
+import type { SOIEntry } from '@starryeyes/shared';
 import type { ISimulationBridge } from './bridge.ts';
 
 interface JoinResponse {
@@ -47,6 +50,8 @@ export class RemoteBridge implements ISimulationBridge {
   private reconnectDelay = 1000;
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   private heartbeatIntervalMs: number;
+  private soiTable: SOIEntry[] = [];
+  private _soiParentId = 'sol';
 
   constructor(serverUrl = '', heartbeatIntervalMs = 1000) {
     this.heartbeatIntervalMs = heartbeatIntervalMs;
@@ -67,6 +72,10 @@ export class RemoteBridge implements ISimulationBridge {
 
   getSessionToken(): string {
     return this.sessionToken;
+  }
+
+  get soiParentId(): string {
+    return this._soiParentId;
   }
 
   onSnapshot(cb: (s: SystemSnapshot) => void): () => void {
@@ -92,6 +101,9 @@ export class RemoteBridge implements ISimulationBridge {
     const bodiesRes = await fetch(`${this.serverUrl}/api/bodies`);
     const bodiesData: BodiesResponse = await bodiesRes.json();
     this.bodies = bodiesData.bodies;
+
+    // Build SOI table for reference frame determination
+    this.soiTable = buildSOITable(this.bodies);
 
     // 3. Open WebSocket
     await this.openWebSocket();
@@ -235,6 +247,21 @@ export class RemoteBridge implements ISimulationBridge {
         routeLine,
       };
     });
+
+    // Determine SOI parent for the player ship
+    const myShip = ships.find(s => s.id === this.shipId);
+    if (myShip && this.soiTable.length > 0) {
+      const bodyPositions = new Map<string, Vec2>();
+      for (const b of bodySnapshots) {
+        bodyPositions.set(b.id, b.position);
+      }
+      this._soiParentId = determineSOIParent(
+        myShip.position,
+        this._soiParentId,
+        this.soiTable,
+        bodyPositions,
+      );
+    }
 
     return {
       gameTime: localGameTime,

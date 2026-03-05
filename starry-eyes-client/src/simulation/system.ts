@@ -8,6 +8,7 @@ import type {
 import {
   vec2, vec2Add, vec2Length, vec2Normalize, vec2Scale, Vec2Zero,
   keplerPositionAtTime,
+  bodyVelocityAtTime as bodyVelocityAtTimeHelper,
   transitPositionAtTime, sampleRouteAhead,
   SHIP_FUEL_CAPACITY,
   ORBIT_VISUAL_RADIUS,
@@ -54,6 +55,10 @@ export class StarSystem {
     }
 
     return keplerPositionAtTime(body.elements, t);
+  }
+
+  bodyVelocityAtTime(bodyId: string, t: number): Vec2 {
+    return bodyVelocityAtTimeHelper(bodyId, t, this.bodies, (id, time) => this.bodyPositionAtTime(id, time));
   }
 
   private updateBodyPositions(): void {

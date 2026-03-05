@@ -10,6 +10,7 @@ import type {
 import {
   vec2, vec2Add, vec2Length, vec2Normalize, Vec2Zero,
   keplerPositionAtTime,
+  bodyVelocityAtTime as bodyVelocityAtTimeHelper,
   transitPositionAtTime, sampleRouteAhead,
   computeRoute, brachistochroneFuelCost,
   createDefaultBodies, createPlayerShip,
@@ -88,6 +89,10 @@ export class GameServer {
     return keplerPositionAtTime(body.elements, t);
   }
 
+  bodyVelocityAtTime(bodyId: string, t: number): Vec2 {
+    return bodyVelocityAtTimeHelper(bodyId, t, this.bodies, (id, time) => this.bodyPositionAtTime(id, time));
+  }
+
   private updateBodyPositions(): void {
     for (const body of this.bodies) {
       if (body.elements === null) {
@@ -110,6 +115,12 @@ export class GameServer {
         const ship = this.ships.find(s => s.id === cmd.shipId);
         if (!ship) return {};
 
+        // If orbiting, inject body velocity so computeRoute sees initial speed
+        const savedVelocity = ship.velocity;
+        if (ship.mode === 'orbit' && ship.orbitBodyId) {
+          ship.velocity = this.bodyVelocityAtTime(ship.orbitBodyId, this.gameTime);
+        }
+
         const route = computeRoute(
           ship,
           cmd.destination,
@@ -117,10 +128,16 @@ export class GameServer {
           this.bodies,
           (bodyId, t) => this.bodyPositionAtTime(bodyId, t),
         );
-        if (!route) return {};
+        if (!route) {
+          ship.velocity = savedVelocity;
+          return {};
+        }
 
         const fuelCost = brachistochroneFuelCost(route.totalTime, ship.fuelConsumptionRate);
-        if (fuelCost > ship.fuel) return {};
+        if (fuelCost > ship.fuel) {
+          ship.velocity = savedVelocity;
+          return {};
+        }
 
         ship.route = {
           ...route,
@@ -175,9 +192,9 @@ export class GameServer {
       case 'UNDOCK': {
         const ship = this.ships.find(s => s.id === cmd.shipId);
         if (!ship) return {};
-        if (ship.mode === 'orbit') {
+        if (ship.mode === 'orbit' && ship.orbitBodyId) {
           ship.mode = 'drift';
-          ship.velocity = Vec2Zero;
+          ship.velocity = this.bodyVelocityAtTime(ship.orbitBodyId, this.gameTime);
           ship.orbitBodyId = null;
         }
         return { ship: this.shipSnapshot(ship) };

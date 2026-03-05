@@ -1,5 +1,5 @@
-import type { OrbitalElements, Vec2 } from './types.js';
-import { vec2, vec2Length, vec2Cross, vec2Dot } from './types.js';
+import type { OrbitalElements, Vec2, CelestialBody } from './types.js';
+import { vec2, vec2Add, vec2Length, vec2Cross, vec2Dot } from './types.js';
 
 const TWO_PI = 2 * Math.PI;
 
@@ -227,4 +227,30 @@ export function computeOrbitalEllipse(el: OrbitalElements, numPoints: number): V
 /** Orbital period T = 2π√(a³/μ). Only meaningful for elliptical orbits. */
 export function orbitalPeriod(a: number, mu: number): number {
   return TWO_PI * Math.sqrt(a * a * a / mu);
+}
+
+// ── Body velocity helper ────────────────────────────────────────────
+
+/** Compute the heliocentric velocity of a body at time t, handling parent chains. */
+export function bodyVelocityAtTime(
+  bodyId: string,
+  t: number,
+  bodies: readonly CelestialBody[],
+  bodyPositionAtTimeFn: (id: string, t: number) => Vec2,
+): Vec2 {
+  if (bodyId === 'sol') return { x: 0, y: 0 };
+  const body = bodies.find(b => b.id === bodyId);
+  if (!body || !body.elements) return { x: 0, y: 0 };
+
+  // Get local velocity from Kepler state
+  const localState = keplerStateAtTime(body.elements, t);
+  let vel = localState.vel;
+
+  // Add parent's heliocentric velocity (recursive)
+  if (body.parentId && body.parentId !== 'sol') {
+    const parentVel = bodyVelocityAtTime(body.parentId, t, bodies, bodyPositionAtTimeFn);
+    vel = vec2Add(vel, parentVel);
+  }
+
+  return vel;
 }

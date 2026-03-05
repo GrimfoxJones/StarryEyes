@@ -120,6 +120,7 @@ export function setupInput(
 
     if (closest) {
       camera.focusTarget = closest;
+      camera.resetFocusPan();
       const body = snapshot.bodies.find(b => b.id === closest);
       if (body) {
         camera.focusOn(body.position.x, body.position.y);

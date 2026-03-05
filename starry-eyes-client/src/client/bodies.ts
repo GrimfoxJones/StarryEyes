@@ -81,7 +81,7 @@ export class BodyRenderer {
         if (moonAlpha === 0) {
           orbitGfx.clear();
         } else {
-          this.drawOrbitEllipse(orbitGfx, body, camera, moonAlpha);
+          this.drawOrbitEllipse(orbitGfx, body, camera, bodyById, moonAlpha);
         }
       }
 
@@ -155,7 +155,10 @@ export class BodyRenderer {
     gfx.y = screen.y;
   }
 
-  private drawOrbitEllipse(gfx: Graphics, body: BodySnapshot, camera: Camera, moonAlpha = 1): void {
+  private drawOrbitEllipse(
+    gfx: Graphics, body: BodySnapshot, camera: Camera,
+    bodyById: Map<string, BodySnapshot>, moonAlpha = 1,
+  ): void {
     if (!body.elements) return;
 
     // Skip orbits that are too large or too small on screen
@@ -167,6 +170,17 @@ export class BodyRenderer {
 
     const points = computeOrbitalEllipse(body.elements, 128);
 
+    // Offset by parent body's heliocentric position (orbital ellipse points are parent-relative)
+    let offsetX = 0;
+    let offsetY = 0;
+    if (body.parentId) {
+      const parent = bodyById.get(body.parentId);
+      if (parent) {
+        offsetX = parent.position.x;
+        offsetY = parent.position.y;
+      }
+    }
+
     gfx.clear();
 
     const baseAlpha = body.type === 'asteroid' ? 0.05 : 0.15;
@@ -174,7 +188,7 @@ export class BodyRenderer {
 
     let started = false;
     for (let i = 0; i < points.length; i++) {
-      const p = camera.simToScreen(points[i].x, points[i].y);
+      const p = camera.simToScreen(points[i].x + offsetX, points[i].y + offsetY);
 
       if (!started) {
         gfx.moveTo(p.x, p.y);

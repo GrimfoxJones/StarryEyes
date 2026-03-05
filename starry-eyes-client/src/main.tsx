@@ -7,7 +7,8 @@ import { HudOverlay } from './client/hud/HudOverlay.tsx';
 import { useGameStore } from './client/hud/store.ts';
 import { RemoteBridge } from './RemoteBridge.ts';
 import type { Vec2 } from '@starryeyes/shared';
-import { sampleRouteAhead } from '@starryeyes/shared';
+import { sampleRouteAhead, buildSOITable } from '@starryeyes/shared';
+import type { SOIEntry } from '@starryeyes/shared';
 
 async function boot() {
   // PixiJS setup
@@ -25,11 +26,16 @@ async function boot() {
   const bridge = new RemoteBridge();
   await bridge.connect();
 
+  // Build SOI table (planets only) for camera reference frame
+  const allSOIs = buildSOITable(bridge.getBodies());
+  const planetSOIs: SOIEntry[] = allSOIs.filter(e => e.body.type === 'planet');
+
   // Renderer
   const renderer = new GameRenderer(app);
 
   // Trail recorder
   const trail = new TrailRecorder();
+  let lastRefBodyId = 'sol';
 
   // Input
   setupInput(app.canvas, renderer.camera, bridge, renderer.targetDisplay);
@@ -57,9 +63,25 @@ async function boot() {
     const myShipId = bridge.getMyShipId();
     const myShip = snapshot.ships.find(s => s.id === myShipId);
 
-    // Record trail
+    // Update camera reference frame based on what the camera is looking at
+    renderer.camera.updateReferenceFrame(snapshot.bodies, planetSOIs);
+
+    // Clear trail when reference body changes
+    if (renderer.camera.referenceBodyId !== lastRefBodyId) {
+      trail.clear();
+      lastRefBodyId = renderer.camera.referenceBodyId;
+    }
+
+    // Record trail (relative to reference body)
     if (myShip) {
-      trail.record(myShip.position, snapshot.gameTime);
+      const refOff = renderer.camera.referenceOffset;
+      trail.record(
+        {
+          x: myShip.position.x - refOff.x,
+          y: myShip.position.y - refOff.y,
+        },
+        snapshot.gameTime,
+      );
     }
 
     // Update prediction every few frames
@@ -70,7 +92,30 @@ async function boot() {
       predictionPoints = [];
     }
 
-    // Track focus target
+    // Auto-lock onto planets near screen center
+    if (!renderer.camera.focusTarget) {
+      const cx = renderer.camera.viewportWidth / 2;
+      const cy = renderer.camera.viewportHeight / 2;
+      let nearestId: string | null = null;
+      let nearestDist = Infinity;
+      for (const body of snapshot.bodies) {
+        if (body.type !== 'planet') continue;
+        const screen = renderer.camera.simToScreen(body.position.x, body.position.y);
+        const dx = screen.x - cx;
+        const dy = screen.y - cy;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < nearestDist) {
+          nearestDist = dist;
+          nearestId = body.id;
+        }
+      }
+      if (nearestId && nearestDist < 50) {
+        renderer.camera.focusTarget = nearestId;
+        renderer.camera.resetFocusPan();
+      }
+    }
+
+    // Track focus target (heliocentric — focusOn converts to local)
     if (renderer.camera.focusTarget) {
       const target = snapshot.bodies.find(b => b.id === renderer.camera.focusTarget);
       if (target) {
@@ -81,7 +126,14 @@ async function boot() {
     // Render
     renderer.render(snapshot);
     renderer.renderPrediction(predictionPoints);
-    renderer.renderTrail(trail.getPoints());
+    // Trail points are reference-frame-local; add referenceOffset so simToScreen
+    // (which subtracts referenceOffset) renders them in the correct frame
+    const refOff = renderer.camera.referenceOffset;
+    const trailHelio = trail.getPoints().map(p => ({
+      x: p.x + refOff.x,
+      y: p.y + refOff.y,
+    }));
+    renderer.renderTrail(trailHelio);
 
     // Update targeting display
     renderer.targetDisplay.update(snapshot, app.ticker.deltaMS);

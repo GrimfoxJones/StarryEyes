@@ -1,7 +1,8 @@
-import type { Vec2 } from '@starryeyes/shared';
+import type { Vec2, BodySnapshot } from '@starryeyes/shared';
+import type { SOIEntry } from '@starryeyes/shared';
 
 export class Camera {
-  // Camera center in simulation coordinates
+  // Camera center in local (reference-frame) coordinates
   x = 0;
   y = 0;
 
@@ -19,13 +20,17 @@ export class Camera {
 
   // Pan state
   private isPanning = false;
-  private panStartX = 0;
-  private panStartY = 0;
-  private cameraStartX = 0;
-  private cameraStartY = 0;
+  private lastPanScreenX = 0;
+  private lastPanScreenY = 0;
 
-  // Focus tracking
+  // Focus tracking with pan offset
   focusTarget: string | null = null;
+  private focusPanX = 0;
+  private focusPanY = 0;
+
+  // Reference frame: heliocentric position of the reference body
+  referenceOffset: Vec2 = { x: 0, y: 0 };
+  referenceBodyId = 'sol';
 
   get scale(): number {
     return Math.pow(this.zoomBase, this.zoomLevel);
@@ -33,7 +38,6 @@ export class Camera {
 
   /** Set initial zoom to show system (~2 AU across the viewport) */
   initForSystem(): void {
-    // Show ~2e12 m across (a bit beyond Jupiter's orbit)
     const targetScale = this.viewportWidth / (2e12);
     this.zoomLevel = Math.log(targetScale) / Math.log(this.zoomBase);
   }
@@ -43,39 +47,91 @@ export class Camera {
     this.viewportHeight = height;
   }
 
-  /** Simulation → screen coordinates */
+  /** Simulation → screen coordinates (subtracts referenceOffset for local frame) */
   simToScreen(simX: number, simY: number): { x: number; y: number } {
     return {
-      x: (simX - this.x) * this.scale + this.viewportWidth / 2,
-      y: -(simY - this.y) * this.scale + this.viewportHeight / 2, // flip Y
+      x: (simX - this.referenceOffset.x - this.x) * this.scale + this.viewportWidth / 2,
+      y: -(simY - this.referenceOffset.y - this.y) * this.scale + this.viewportHeight / 2,
     };
   }
 
-  /** Screen → simulation coordinates */
+  /** Screen → simulation coordinates (adds referenceOffset back) */
   screenToSim(screenX: number, screenY: number): Vec2 {
     return {
-      x: (screenX - this.viewportWidth / 2) / this.scale + this.x,
-      y: -(screenY - this.viewportHeight / 2) / this.scale + this.y,
+      x: (screenX - this.viewportWidth / 2) / this.scale + this.x + this.referenceOffset.x,
+      y: -(screenY - this.viewportHeight / 2) / this.scale + this.y + this.referenceOffset.y,
     };
+  }
+
+  /**
+   * Update the camera's reference frame based on what the camera is looking at.
+   * Only planets can be reference bodies.
+   */
+  updateReferenceFrame(
+    bodies: readonly BodySnapshot[],
+    planetSOIs: readonly SOIEntry[],
+  ): void {
+    // Compute heliocentric position of camera center
+    const helioX = this.x + this.referenceOffset.x;
+    const helioY = this.y + this.referenceOffset.y;
+
+    // Find which planet SOI the camera center is inside
+    let newRefId = 'sol';
+    for (const entry of planetSOIs) {
+      const body = bodies.find(b => b.id === entry.bodyId);
+      if (!body) continue;
+
+      const dx = helioX - body.position.x;
+      const dy = helioY - body.position.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+
+      const isCurrentRef = entry.bodyId === this.referenceBodyId;
+      const threshold = isCurrentRef ? entry.soiRadius * 1.2 : entry.soiRadius;
+
+      if (dist < threshold) {
+        newRefId = entry.bodyId;
+        break;
+      }
+    }
+
+    if (newRefId === this.referenceBodyId) {
+      // Same reference body — update its position (it moves each frame)
+      if (newRefId !== 'sol') {
+        const body = bodies.find(b => b.id === newRefId);
+        if (body) {
+          const dx = body.position.x - this.referenceOffset.x;
+          const dy = body.position.y - this.referenceOffset.y;
+          this.x -= dx;
+          this.y -= dy;
+          this.referenceOffset = body.position;
+        }
+      }
+      return;
+    }
+
+    // Reference body changed — adjust camera so the view doesn't jump
+    const newOffset = newRefId === 'sol'
+      ? { x: 0, y: 0 }
+      : (bodies.find(b => b.id === newRefId)?.position ?? { x: 0, y: 0 });
+
+    this.x = helioX - newOffset.x;
+    this.y = helioY - newOffset.y;
+    this.referenceOffset = newOffset;
+    this.referenceBodyId = newRefId;
   }
 
   /** Handle mouse wheel zoom (toward cursor position) */
   zoom(delta: number, screenX: number, screenY: number): void {
-    // Get sim position under cursor before zoom
     const simBefore = this.screenToSim(screenX, screenY);
 
-    // Adjust zoom level
     this.zoomLevel += delta > 0 ? -3 : 3;
 
-    // Clamp by actual scale value
     const minLevel = Math.log(this.minScale) / Math.log(this.zoomBase);
     const maxLevel = Math.log(this.maxScale) / Math.log(this.zoomBase);
     this.zoomLevel = Math.max(minLevel, Math.min(maxLevel, this.zoomLevel));
 
-    // Get sim position under cursor after zoom
     const simAfter = this.screenToSim(screenX, screenY);
 
-    // Adjust camera to keep cursor position stable
     this.x += simBefore.x - simAfter.x;
     this.y += simBefore.y - simAfter.y;
   }
@@ -83,20 +139,25 @@ export class Camera {
   /** Start pan operation */
   startPan(screenX: number, screenY: number): void {
     this.isPanning = true;
-    this.panStartX = screenX;
-    this.panStartY = screenY;
-    this.cameraStartX = this.x;
-    this.cameraStartY = this.y;
-    this.focusTarget = null;
+    this.lastPanScreenX = screenX;
+    this.lastPanScreenY = screenY;
   }
 
-  /** Continue pan operation */
+  /** Continue pan operation (incremental — no snap issues on state changes) */
   movePan(screenX: number, screenY: number): void {
     if (!this.isPanning) return;
-    const dx = screenX - this.panStartX;
-    const dy = screenY - this.panStartY;
-    this.x = this.cameraStartX - dx / this.scale;
-    this.y = this.cameraStartY + dy / this.scale; // flip Y
+    const dx = screenX - this.lastPanScreenX;
+    const dy = screenY - this.lastPanScreenY;
+    this.lastPanScreenX = screenX;
+    this.lastPanScreenY = screenY;
+
+    if (this.focusTarget) {
+      this.focusPanX -= dx / this.scale;
+      this.focusPanY += dy / this.scale;
+    } else {
+      this.x -= dx / this.scale;
+      this.y += dy / this.scale;
+    }
   }
 
   /** End pan operation */
@@ -104,10 +165,35 @@ export class Camera {
     this.isPanning = false;
   }
 
-  /** Focus camera on a simulation point */
+  /** Focus camera on a simulation point (in heliocentric coords).
+   *  Applies accumulated pan offset. Breaks focus if body scrolls off screen. */
   focusOn(simX: number, simY: number): void {
-    this.x = simX;
-    this.y = simY;
+    const bodyLocalX = simX - this.referenceOffset.x;
+    const bodyLocalY = simY - this.referenceOffset.y;
+
+    // Where would the body appear on screen with current pan offset?
+    const bodyScreenX = -this.focusPanX * this.scale + this.viewportWidth / 2;
+    const bodyScreenY = this.focusPanY * this.scale + this.viewportHeight / 2;
+    const margin = 100;
+    if (bodyScreenX < -margin || bodyScreenX > this.viewportWidth + margin ||
+        bodyScreenY < -margin || bodyScreenY > this.viewportHeight + margin) {
+      // Body is off screen — break focus, camera stays where it is
+      this.x = bodyLocalX + this.focusPanX;
+      this.y = bodyLocalY + this.focusPanY;
+      this.focusTarget = null;
+      this.focusPanX = 0;
+      this.focusPanY = 0;
+      return;
+    }
+
+    this.x = bodyLocalX + this.focusPanX;
+    this.y = bodyLocalY + this.focusPanY;
+  }
+
+  /** Clear focus pan offset (call when setting a new focus target) */
+  resetFocusPan(): void {
+    this.focusPanX = 0;
+    this.focusPanY = 0;
   }
 
   get panning(): boolean {

@@ -9,6 +9,7 @@ export interface ISystemContext {
   gameTime: number;
   timeCompression: number;
   bodyPositionAtTime(bodyId: string, t: number): Vec2;
+  bodyVelocityAtTime(bodyId: string, t: number): Vec2;
 }
 
 export function processCommand(system: ISystemContext, cmd: PlayerCommand): void {
@@ -17,6 +18,12 @@ export function processCommand(system: ISystemContext, cmd: PlayerCommand): void
       const ship = system.ships.find(s => s.id === cmd.shipId);
       if (!ship) break;
 
+      // If orbiting, inject body velocity so computeRoute sees initial speed
+      const savedVelocity = ship.velocity;
+      if (ship.mode === 'orbit' && ship.orbitBodyId) {
+        ship.velocity = system.bodyVelocityAtTime(ship.orbitBodyId, system.gameTime);
+      }
+
       const route = computeRoute(
         ship,
         cmd.destination,
@@ -24,10 +31,17 @@ export function processCommand(system: ISystemContext, cmd: PlayerCommand): void
         system.bodies,
         (bodyId, t) => system.bodyPositionAtTime(bodyId, t),
       );
-      if (!route) break;
+
+      if (!route) {
+        ship.velocity = savedVelocity;
+        break;
+      }
 
       const fuelCost = brachistochroneFuelCost(route.totalTime, ship.fuelConsumptionRate);
-      if (fuelCost > ship.fuel) break; // insufficient fuel
+      if (fuelCost > ship.fuel) {
+        ship.velocity = savedVelocity;
+        break; // insufficient fuel
+      }
 
       ship.route = {
         ...route,
@@ -70,9 +84,9 @@ export function processCommand(system: ISystemContext, cmd: PlayerCommand): void
     case 'UNDOCK': {
       const ship = system.ships.find(s => s.id === cmd.shipId);
       if (!ship) break;
-      if (ship.mode === 'orbit') {
+      if (ship.mode === 'orbit' && ship.orbitBodyId) {
         ship.mode = 'drift';
-        ship.velocity = Vec2Zero;
+        ship.velocity = system.bodyVelocityAtTime(ship.orbitBodyId, system.gameTime);
         ship.orbitBodyId = null;
       }
       break;
