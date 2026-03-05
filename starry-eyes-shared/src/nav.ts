@@ -1,5 +1,5 @@
-import type { Vec2, Route, Destination, ShipState, CelestialBody } from './types.ts';
-import { vec2Add, vec2Scale, vec2Length, vec2Normalize, vec2Dist } from './types.ts';
+import type { Vec2, Route, Destination, ShipState, CelestialBody } from './types.js';
+import { vec2Add, vec2Scale, vec2Length, vec2Normalize, vec2Dist } from './types.js';
 
 // ── Brachistochrone math ────────────────────────────────────────────
 
@@ -209,13 +209,13 @@ export function computeRoute(
 
   // Resolve initial destination position
   let p2: Vec2;
-  const targetBodyId = destination.type === 'body' ? (destination.bodyId ?? null) : null;
+  const targetBodyId = destination.type === 'body' ? destination.bodyId : null;
 
   if (targetBodyId) {
     const body = bodies.find(b => b.id === targetBodyId);
     if (!body) return null;
     p2 = bodyPositionFn(targetBodyId, gameTime);
-  } else if (destination.position) {
+  } else if (destination.type === 'point') {
     p2 = destination.position;
   } else {
     return null;
@@ -267,5 +267,7 @@ export function computeRoute(
     acceleration: accel,
     targetBodyId,
     arcTable,
+    fuelAtRouteStart: 0,
+    fuelConsumptionRate: 0,
   };
 }

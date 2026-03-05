@@ -1,8 +1,8 @@
 import { Container } from 'pixi.js';
-import type { SystemSnapshot } from '../../simulation/types.ts';
+import type { SystemSnapshot } from '@starryeyes/shared';
+import { MIN_BODY_PIXEL_RADIUS } from '@starryeyes/shared';
 import type { Camera } from '../camera.ts';
 import type { ObjectType } from '../hud/store.ts';
-import { MIN_BODY_PIXEL_RADIUS } from '../../simulation/constants.ts';
 import { Reticle } from './Reticle.ts';
 import { ConnectorLine } from './ConnectorLine.ts';
 import { InfoBox } from './InfoBox.ts';

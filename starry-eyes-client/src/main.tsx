@@ -1,12 +1,13 @@
 import { Application } from 'pixi.js';
 import { createRoot } from 'react-dom/client';
-import { StarSystem } from './simulation/system.ts';
 import { GameRenderer } from './client/renderer.ts';
 import { setupInput } from './client/input.ts';
 import { TrailRecorder } from './client/trails.ts';
 import { HudOverlay } from './client/hud/HudOverlay.tsx';
 import { useGameStore } from './client/hud/store.ts';
-import type { SystemSnapshot, Vec2 } from './simulation/types.ts';
+import { RemoteBridge } from './RemoteBridge.ts';
+import type { Vec2 } from '@starryeyes/shared';
+import { sampleRouteAhead } from '@starryeyes/shared';
 
 async function boot() {
   // PixiJS setup
@@ -20,8 +21,9 @@ async function boot() {
   const pixiContainer = document.getElementById('pixi-container')!;
   pixiContainer.appendChild(app.canvas);
 
-  // Simulation
-  const system = new StarSystem();
+  // Connect to server
+  const bridge = new RemoteBridge();
+  await bridge.connect();
 
   // Renderer
   const renderer = new GameRenderer(app);
@@ -30,7 +32,7 @@ async function boot() {
   const trail = new TrailRecorder();
 
   // Input
-  setupInput(app.canvas, renderer.camera, system, renderer.targetDisplay);
+  setupInput(app.canvas, renderer.camera, bridge, renderer.targetDisplay);
 
   // React HUD
   const hudRoot = document.getElementById('hud-root')!;
@@ -43,51 +45,52 @@ async function boot() {
   });
 
   // Game loop
-  let lastSnapshot: SystemSnapshot = system.snapshot();
   let predictionPoints: Vec2[] = [];
   let predictionFrame = 0;
 
   app.ticker.add(() => {
-    const realDt = app.ticker.deltaMS / 1000;
+    // Interpolate from last server snapshot
+    const snapshot = bridge.interpolate();
+    if (!snapshot) return;
 
-    // Clamp to prevent spiral of death
-    const clampedRealDt = Math.min(realDt, 0.1);
-    const gameDt = clampedRealDt * system.timeCompression;
-
-    // Tick simulation
-    lastSnapshot = system.tick(gameDt);
+    // Find our ship
+    const myShipId = bridge.getMyShipId();
+    const myShip = snapshot.ships.find(s => s.id === myShipId);
 
     // Record trail
-    const playerShip = system.ships[0];
-    if (playerShip) {
-      trail.record(playerShip.position, system.gameTime);
+    if (myShip) {
+      trail.record(myShip.position, snapshot.gameTime);
     }
 
-    // Update prediction every few frames (performance)
+    // Update prediction every few frames
     predictionFrame++;
-    if (predictionFrame % 5 === 0) {
-      predictionPoints = system.predictTrajectory('player');
+    if (predictionFrame % 5 === 0 && myShip?.route) {
+      predictionPoints = sampleRouteAhead(myShip.route, snapshot.gameTime, 30);
+    } else if (!myShip?.route) {
+      predictionPoints = [];
     }
 
     // Track focus target
     if (renderer.camera.focusTarget) {
-      const target = lastSnapshot.bodies.find(b => b.id === renderer.camera.focusTarget);
+      const target = snapshot.bodies.find(b => b.id === renderer.camera.focusTarget);
       if (target) {
         renderer.camera.focusOn(target.position.x, target.position.y);
       }
     }
 
     // Render
-    renderer.render(lastSnapshot);
+    renderer.render(snapshot);
     renderer.renderPrediction(predictionPoints);
     renderer.renderTrail(trail.getPoints());
 
     // Update targeting display
-    renderer.targetDisplay.update(lastSnapshot, app.ticker.deltaMS);
+    renderer.targetDisplay.update(snapshot, app.ticker.deltaMS);
 
     // Update HUD store
-    useGameStore.getState().update(lastSnapshot);
+    useGameStore.getState().update(snapshot);
   });
 }
 
-boot();
+boot().catch((err) => {
+  console.error('Failed to boot:', err);
+});

@@ -24,9 +24,7 @@ export function HudOverlay() {
         <div className="hud-row">
           <span className="hud-label">WARP</span>
           <span className="hud-value">{formatCompression(snapshot.timeCompression)}</span>
-          {snapshot.paused && <span className="hud-alert">PAUSED</span>}
         </div>
-        <div className="hud-hint">SPACE=pause +/-=warp</div>
       </div>
 
       {/* Top-right: Mode / Velocity / Destination / ETA */}
@@ -45,10 +43,18 @@ export function HudOverlay() {
             </div>
           )}
           {ship.eta != null && ship.eta > 0 && (
-            <div className="hud-row">
-              <span className="hud-label">ETA</span>
-              <span className="hud-value">{formatEta(ship.eta)}</span>
-            </div>
+            <>
+              <div className="hud-row">
+                <span className="hud-label">ETA</span>
+                <span className="hud-value">{formatEta(ship.eta)}</span>
+              </div>
+              {snapshot.timeCompression > 1 && (
+                <div className="hud-row">
+                  <span className="hud-label">REAL</span>
+                  <span className="hud-value hud-dim">{formatEta(ship.eta / snapshot.timeCompression)}</span>
+                </div>
+              )}
+            </>
           )}
           {ship.isDecelerating && (
             <span className="hud-alert">DECEL</span>

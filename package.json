@@ -1,0 +1,11 @@
+{
+  "name": "starryeyes",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently \"pnpm --filter @starryeyes/server dev\" \"pnpm --filter starry-eyes-client dev\"",
+    "build": "pnpm -r build"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  }
+}

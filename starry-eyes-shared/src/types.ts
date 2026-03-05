@@ -74,7 +74,7 @@ export interface OrbitalElements {
 
 // ── Celestial Body ──────────────────────────────────────────────────
 
-export type BodyType = 'star' | 'planet' | 'moon' | 'asteroid';
+export type BodyType = 'star' | 'planet' | 'moon' | 'asteroid' | 'station';
 
 export interface CelestialBody {
   readonly id: string;
@@ -89,7 +89,7 @@ export interface CelestialBody {
 
 // ── Nav Computer Types ──────────────────────────────────────────────
 
-export type ShipMode = 'idle' | 'drift' | 'transit' | 'orbit';
+export type ShipMode = 'drift' | 'transit' | 'orbit';
 
 export interface Route {
   readonly startPos: Vec2;           // P0
@@ -102,13 +102,13 @@ export interface Route {
   readonly acceleration: number;
   readonly targetBodyId: string | null;
   readonly arcTable: readonly { readonly t: number; readonly dist: number }[];
+  readonly fuelAtRouteStart: number;       // fuel when route began
+  readonly fuelConsumptionRate: number;    // kg/s burn rate
 }
 
-export interface Destination {
-  readonly type: 'body' | 'point';
-  readonly bodyId?: string;
-  readonly position?: Vec2;
-}
+export type Destination =
+  | { readonly type: 'body'; readonly bodyId: string }
+  | { readonly type: 'point'; readonly position: Vec2 };
 
 // ── Ship State ──────────────────────────────────────────────────────
 
@@ -146,18 +146,20 @@ export interface ShipSnapshot {
   readonly mode: ShipMode;
   readonly fuel: number;
   readonly maxFuel: number;
+  readonly fuelConsumptionRate: number;
   readonly speed: number;
   readonly destinationName: string | null;
   readonly eta: number | null;
   readonly routeLine: readonly Vec2[] | null;
   readonly isDecelerating: boolean;
+  readonly route: Route | null;
+  readonly orbitBodyId: string | null;
 }
 
 export interface SystemSnapshot {
   readonly gameTime: number;
   readonly bodies: readonly BodySnapshot[];
   readonly ships: readonly ShipSnapshot[];
-  readonly paused: boolean;
   readonly timeCompression: number;
 }
 
@@ -166,6 +168,4 @@ export interface SystemSnapshot {
 export type PlayerCommand =
   | { readonly type: 'SET_DESTINATION'; readonly shipId: string; readonly destination: Destination }
   | { readonly type: 'CANCEL_ROUTE'; readonly shipId: string }
-  | { readonly type: 'SET_TIME_COMPRESSION'; readonly multiplier: number }
-  | { readonly type: 'PAUSE' }
-  | { readonly type: 'RESUME' };
+  | { readonly type: 'UNDOCK'; readonly shipId: string };

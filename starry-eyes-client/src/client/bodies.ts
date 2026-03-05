@@ -1,7 +1,6 @@
 import { Graphics, Text, TextStyle, Container } from 'pixi.js';
-import type { BodySnapshot } from '../simulation/types.ts';
-import { computeOrbitalEllipse } from '../simulation/kepler.ts';
-import { MIN_BODY_PIXEL_RADIUS } from '../simulation/constants.ts';
+import type { BodySnapshot } from '@starryeyes/shared';
+import { computeOrbitalEllipse, MIN_BODY_PIXEL_RADIUS } from '@starryeyes/shared';
 import type { Camera } from './camera.ts';
 
 /** Below this screen-px distance to parent, moon is fully hidden */
@@ -15,7 +14,7 @@ export function isMoonHidden(
   bodies: readonly BodySnapshot[],
   camera: Camera,
 ): boolean {
-  if (body.type !== 'moon' || !body.parentId) return false;
+  if ((body.type !== 'moon' && body.type !== 'station') || !body.parentId) return false;
   const parent = bodies.find(b => b.id === body.parentId);
   if (!parent) return false;
   const moonScreen = camera.simToScreen(body.position.x, body.position.y);

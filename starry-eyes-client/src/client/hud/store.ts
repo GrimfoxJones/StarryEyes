@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { SystemSnapshot } from '../../simulation/types.ts';
+import type { SystemSnapshot } from '@starryeyes/shared';
 import { TAB_DEFAULTS } from './left-panel/tabConfig.ts';
 
 export type PrimaryTab = 'SYS' | 'CREW' | 'OPS' | 'DOCK';

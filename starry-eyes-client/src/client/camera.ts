@@ -1,4 +1,4 @@
-import type { Vec2 } from '../simulation/types.ts';
+import type { Vec2 } from '@starryeyes/shared';
 
 export class Camera {
   // Camera center in simulation coordinates

@@ -1,0 +1,7 @@
+packages:
+  - starry-eyes-shared
+  - starry-eyes-client
+  - starry-eyes-server
+
+ignoredBuiltDependencies:
+  - esbuild

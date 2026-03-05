@@ -1,4 +1,4 @@
-import type { SystemSnapshot, BodySnapshot, BodyType } from '../../simulation/types.ts';
+import type { SystemSnapshot, BodySnapshot, BodyType } from '@starryeyes/shared';
 import type { ObjectType } from '../hud/store.ts';
 
 export interface InfoContent {
@@ -9,6 +9,7 @@ export interface InfoContent {
 
 export function bodyTypeToObjectType(type: BodyType): ObjectType {
   if (type === 'star') return 'planet';
+  if (type === 'station') return 'station';
   return type as ObjectType;
 }
 
@@ -22,9 +23,8 @@ export function getInfoContent(
     case 'planet':
     case 'moon':
     case 'asteroid':
-      return getBodyContent(objectId, objectType, snapshot, shipPos);
     case 'station':
-      return getStationContent(objectId);
+      return getBodyContent(objectId, objectType, snapshot, shipPos);
     case 'ship':
       return getShipContent(objectId, snapshot);
   }
@@ -64,17 +64,6 @@ function getBodyContent(
   };
 }
 
-function getStationContent(objectId: string): InfoContent {
-  return {
-    title: objectId,
-    typeLabel: 'STATION',
-    rows: [
-      { label: 'Class', value: '--' },
-      { label: 'Faction', value: '--' },
-    ],
-  };
-}
-
 function getShipContent(objectId: string, snapshot: SystemSnapshot): InfoContent {
   const ship = snapshot.ships.find((s) => s.id === objectId);
   if (!ship) {
@@ -93,6 +82,7 @@ function getShipContent(objectId: string, snapshot: SystemSnapshot): InfoContent
 function formatBodySubType(body: BodySnapshot): string {
   if (body.type === 'asteroid') return 'Asteroid';
   if (body.type === 'moon') return 'Moon';
+  if (body.type === 'station') return 'Station';
   return 'Rocky';
 }
 

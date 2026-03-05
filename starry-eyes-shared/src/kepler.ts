@@ -1,5 +1,5 @@
-import type { OrbitalElements, Vec2 } from './types.ts';
-import { vec2, vec2Length, vec2Cross, vec2Dot } from './types.ts';
+import type { OrbitalElements, Vec2 } from './types.js';
+import { vec2, vec2Length, vec2Cross, vec2Dot } from './types.js';
 
 const TWO_PI = 2 * Math.PI;
 

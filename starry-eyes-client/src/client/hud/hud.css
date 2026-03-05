@@ -63,6 +63,10 @@
   margin-bottom: 0;
 }
 
+.hud-dim {
+  opacity: 0.6;
+}
+
 .hud-alert {
   color: var(--alert-red);
   font-size: 11px;

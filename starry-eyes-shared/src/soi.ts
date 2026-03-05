@@ -1,6 +1,6 @@
-import type { CelestialBody, Vec2 } from './types.ts';
-import { vec2Dist } from './types.ts';
-import { G } from './constants.ts';
+import type { CelestialBody, Vec2 } from './types.js';
+import { vec2Dist } from './types.js';
+import { G } from './constants.js';
 
 // ── SOI Entry ────────────────────────────────────────────────────────
 

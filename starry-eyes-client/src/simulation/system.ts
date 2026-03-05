@@ -4,108 +4,18 @@ import type {
   SystemSnapshot,
   PlayerCommand,
   Vec2,
-} from './types.ts';
-import { vec2, vec2Add, vec2Length, vec2Normalize, vec2Scale, Vec2Zero } from './types.ts';
-import { keplerPositionAtTime } from './kepler.ts';
-import { processCommand } from './commands.ts';
-import { transitPositionAtTime, sampleRouteAhead } from './nav.ts';
+} from '@starryeyes/shared';
 import {
-  G,
-  STAR_MU,
-  STAR_MASS,
-  SHIP_MAX_ACCELERATION,
+  vec2, vec2Add, vec2Length, vec2Normalize, vec2Scale, Vec2Zero,
+  keplerPositionAtTime,
+  transitPositionAtTime, sampleRouteAhead,
   SHIP_FUEL_CAPACITY,
-  SHIP_FUEL_CONSUMPTION_RATE,
   ORBIT_VISUAL_RADIUS,
   ORBIT_VISUAL_SPEED,
-} from './constants.ts';
-
-// ── Body definitions ────────────────────────────────────────────────
-
-function makeBody(
-  id: string,
-  name: string,
-  type: CelestialBody['type'],
-  mass: number,
-  radius: number,
-  color: number,
-  parentId: string | null,
-  a: number,
-  e: number,
-  omega: number,
-  M0: number,
-  mu: number,
-): CelestialBody {
-  return {
-    id, name, type, mass, radius, color, parentId,
-    elements: { a, e, omega, M0, epoch: 0, mu, direction: 1 },
-  };
-}
-
-function createBodies(): CelestialBody[] {
-  const sol: CelestialBody = {
-    id: 'sol', name: 'Sol', type: 'star',
-    mass: STAR_MASS, radius: 6.96e8, color: 0xffdd44,
-    elements: null, parentId: null,
-  };
-
-  const tellus = makeBody('tellus', 'Tellus', 'planet', 5.972e24, 6.371e6, 0x4488ff,
-    'sol', 1.496e11, 0.017, 1.796, 0, STAR_MU);
-
-  const mara = makeBody('mara', 'Mara', 'planet', 6.39e23, 3.39e6, 0xcc6644,
-    'sol', 2.279e11, 0.093, 5.0, 2.0, STAR_MU);
-
-  const jove = makeBody('jove', 'Jove', 'planet', 1.898e27, 6.99e7, 0xddaa66,
-    'sol', 7.785e11, 0.049, 4.8, 4.0, STAR_MU);
-
-  const joveMu = G * 1.898e27;
-  const europa = makeBody('europa', 'Europa', 'moon', 4.8e22, 1.56e6, 0xaaccff,
-    'jove', 6.709e8, 0.009, 0, 0, joveMu);
-  const ganymede = makeBody('ganymede', 'Ganymede', 'moon', 1.48e23, 2.63e6, 0xccbbaa,
-    'jove', 1.0704e9, 0.0013, 1.0, 1.5, joveMu);
-
-  const asteroids: CelestialBody[] = [];
-  const rng = seedRng(42);
-  for (let i = 0; i < 15; i++) {
-    const a = 3.3e11 + rng() * 1.6e11;
-    asteroids.push(makeBody(
-      `asteroid_${i}`, `AST-${i + 1}`, 'asteroid', 1e15, 5e4, 0x888888,
-      'sol', a, 0.01 + rng() * 0.15, rng() * Math.PI * 2, rng() * Math.PI * 2, STAR_MU,
-    ));
-  }
-
-  return [sol, tellus, mara, jove, europa, ganymede, ...asteroids];
-}
-
-function seedRng(seed: number): () => number {
-  let s = seed;
-  return () => {
-    s = (s + 0x6D2B79F5) | 0;
-    let t = Math.imul(s ^ (s >>> 15), 1 | s);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-// ── Ship initialization ─────────────────────────────────────────────
-
-function createPlayerShip(bodies: CelestialBody[], gameTime: number): ShipState {
-  const tellus = bodies.find(b => b.id === 'tellus')!;
-  const tellusPos = keplerPositionAtTime(tellus.elements!, gameTime);
-
-  return {
-    id: 'player',
-    position: vec2Add(tellusPos, vec2(ORBIT_VISUAL_RADIUS, 0)),
-    velocity: Vec2Zero,
-    maxAcceleration: SHIP_MAX_ACCELERATION,
-    fuel: SHIP_FUEL_CAPACITY,
-    fuelConsumptionRate: SHIP_FUEL_CONSUMPTION_RATE,
-    mode: 'orbit',
-    route: null,
-    orbitBodyId: 'tellus',
-    orbitAngle: 0,
-  };
-}
+  createDefaultBodies,
+  createPlayerShip,
+  processCommand,
+} from '@starryeyes/shared';
 
 // ── StarSystem ──────────────────────────────────────────────────────
 
@@ -113,16 +23,14 @@ export class StarSystem {
   bodies: CelestialBody[];
   ships: ShipState[];
   gameTime: number;
-  paused: boolean;
   timeCompression: number;
 
   bodyPositions: Map<string, Vec2> = new Map();
 
   constructor() {
-    this.bodies = createBodies();
+    this.bodies = createDefaultBodies();
     this.gameTime = 0;
-    this.paused = false;
-    this.timeCompression = 10000;
+    this.timeCompression = 1000;
     this.updateBodyPositions();
     this.ships = [createPlayerShip(this.bodies, this.gameTime)];
   }
@@ -167,8 +75,6 @@ export class StarSystem {
   }
 
   tick(dt: number): SystemSnapshot {
-    if (this.paused) return this.snapshot();
-
     this.gameTime += dt;
     this.updateBodyPositions();
 
@@ -176,7 +82,7 @@ export class StarSystem {
       switch (ship.mode) {
         case 'transit': {
           if (!ship.route) {
-            ship.mode = 'idle';
+            ship.mode = 'drift';
             break;
           }
 
@@ -192,7 +98,7 @@ export class StarSystem {
               ship.orbitAngle = 0;
             } else {
               ship.position = ship.route.interceptPos;
-              ship.mode = 'idle';
+              ship.mode = 'drift';
             }
             ship.velocity = Vec2Zero;
             ship.route = null;
@@ -206,7 +112,7 @@ export class StarSystem {
 
         case 'orbit': {
           if (!ship.orbitBodyId) {
-            ship.mode = 'idle';
+            ship.mode = 'drift';
             break;
           }
 
@@ -227,10 +133,6 @@ export class StarSystem {
           ship.position = vec2Add(ship.position, vec2Scale(ship.velocity, dt));
           break;
         }
-
-        case 'idle':
-          // No-op
-          break;
       }
     }
 
@@ -240,7 +142,6 @@ export class StarSystem {
   snapshot(): SystemSnapshot {
     return {
       gameTime: this.gameTime,
-      paused: this.paused,
       timeCompression: this.timeCompression,
       bodies: this.bodies.map(b => ({
         id: b.id,
@@ -292,11 +193,14 @@ export class StarSystem {
           mode: s.mode,
           fuel: s.fuel,
           maxFuel: SHIP_FUEL_CAPACITY,
+          fuelConsumptionRate: s.fuelConsumptionRate,
           speed: vec2Length(s.velocity),
           destinationName,
           eta,
           routeLine,
           isDecelerating,
+          route: s.route,
+          orbitBodyId: s.orbitBodyId,
         };
       }),
     };

@@ -1,5 +1,5 @@
-import type { Vec2 } from '../simulation/types.ts';
-import { TRAIL_MAX_POINTS, TRAIL_SAMPLE_INTERVAL } from '../simulation/constants.ts';
+import type { Vec2 } from '@starryeyes/shared';
+import { TRAIL_MAX_POINTS, TRAIL_SAMPLE_INTERVAL } from '@starryeyes/shared';
 
 export class TrailRecorder {
   private points: Vec2[] = [];

@@ -1,5 +1,5 @@
 import { Application, Container, Graphics } from 'pixi.js';
-import type { SystemSnapshot } from '../simulation/types.ts';
+import type { SystemSnapshot } from '@starryeyes/shared';
 import { Camera } from './camera.ts';
 import { BodyRenderer } from './bodies.ts';
 import { TargetDisplay } from './targeting/TargetDisplay.ts';
