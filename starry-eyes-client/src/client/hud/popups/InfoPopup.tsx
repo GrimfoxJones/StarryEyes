@@ -5,6 +5,8 @@ import './InfoPopup.css';
 export function InfoPopup() {
   const popup = useGameStore((s) => s.popup);
   const showModal = useGameStore((s) => s.showModal);
+  const showTravelDialog = useGameStore((s) => s.showTravelDialog);
+  const snapshot = useGameStore((s) => s.snapshot);
 
   if (!popup) return null;
 
@@ -35,15 +37,34 @@ export function InfoPopup() {
     left = 10;
   }
 
+  const canFlyTo = popup.objectType !== 'star' && popup.objectType !== 'ship';
+  const body = canFlyTo ? snapshot?.bodies.find((b) => b.id === popup.objectId) : null;
+
   return (
     <div className="info-popup" style={{ left, top }}>
       <PopupContent objectId={popup.objectId} objectType={popup.objectType} />
-      <button
-        className="info-popup-more"
-        onClick={() => showModal({ objectId: popup.objectId, objectType: popup.objectType })}
-      >
-        [More &rarr;]
-      </button>
+      <div className="info-popup-footer">
+        {canFlyTo && (
+          <button
+            className="info-popup-fly-to"
+            onClick={() => {
+              showTravelDialog({
+                destination: { type: 'body', bodyId: popup.objectId },
+                targetName: body?.name ?? popup.objectId,
+                accelerationG: 1.0,
+              });
+            }}
+          >
+            [Fly To]
+          </button>
+        )}
+        <button
+          className="info-popup-more"
+          onClick={() => showModal({ objectId: popup.objectId, objectType: popup.objectType })}
+        >
+          [More &rarr;]
+        </button>
+      </div>
     </div>
   );
 }

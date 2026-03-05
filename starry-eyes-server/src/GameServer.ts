@@ -15,10 +15,15 @@ import {
   computeRoute, brachistochroneFuelCost,
   createDefaultBodies, createPlayerShip,
   SHIP_FUEL_CAPACITY,
+  SHIP_MAX_ACCELERATION,
+  SHIP_FUEL_CONSUMPTION_RATE,
   ORBIT_VISUAL_RADIUS,
   ORBIT_VISUAL_SPEED,
+  generateSystem, systemToBodies, findStartingBody,
+  TIME_COMPRESSION,
 } from '@starryeyes/shared';
-import { TICK_RATE_MS, DEFAULT_TIME_COMPRESSION } from './config.js';
+import type { GeneratedSystem } from '@starryeyes/shared';
+import { TICK_RATE_MS } from './config.js';
 import type { SessionStore } from './session.js';
 import {
   EVENT_SHIP_ROUTE_CHANGED,
@@ -30,8 +35,8 @@ export class GameServer {
   bodies: CelestialBody[];
   ships: ShipState[] = [];
   gameTime = 0;
-  timeCompression = DEFAULT_TIME_COMPRESSION;
   bodyPositions: Map<string, Vec2> = new Map();
+  generatedSystem: GeneratedSystem | null = null;
 
   private tickInterval: ReturnType<typeof setInterval> | null = null;
   private lastTickTime = 0;
@@ -59,9 +64,44 @@ export class GameServer {
   // ── Ship management ──────────────────────────────────────────────
 
   addShip(shipId: string): ShipState {
+    if (this.generatedSystem) {
+      const startBodyId = findStartingBody(this.generatedSystem);
+      const ship = this.createShipAtBody(shipId, startBodyId);
+      this.ships.push(ship);
+      return ship;
+    }
     const ship = createPlayerShip(this.bodies, this.gameTime, shipId);
     this.ships.push(ship);
     return ship;
+  }
+
+  private createShipAtBody(shipId: string, bodyId: string | null): ShipState {
+    let position: Vec2;
+    let mode: 'orbit' | 'drift' = 'drift';
+    let orbitBodyId: string | null = null;
+
+    if (bodyId) {
+      const bodyPos = this.getBodyPosition(bodyId);
+      position = vec2Add(bodyPos, vec2(ORBIT_VISUAL_RADIUS, 0));
+      mode = 'orbit';
+      orbitBodyId = bodyId;
+    } else {
+      const dist = 2 * 1.496e11;
+      position = vec2(dist, 0);
+    }
+
+    return {
+      id: shipId,
+      position,
+      velocity: Vec2Zero,
+      maxAcceleration: SHIP_MAX_ACCELERATION,
+      fuel: SHIP_FUEL_CAPACITY,
+      fuelConsumptionRate: SHIP_FUEL_CONSUMPTION_RATE,
+      mode,
+      route: null,
+      orbitBodyId,
+      orbitAngle: 0,
+    };
   }
 
   removeShip(shipId: string): void {
@@ -71,19 +111,22 @@ export class GameServer {
   // ── Body position helpers ────────────────────────────────────────
 
   getBodyPosition(bodyId: string): Vec2 {
-    if (bodyId === 'sol') return Vec2Zero;
+    const body = this.bodies.find(b => b.id === bodyId);
+    if (body && body.type === 'star') return Vec2Zero;
     return this.bodyPositions.get(bodyId) ?? Vec2Zero;
   }
 
   bodyPositionAtTime(bodyId: string, t: number): Vec2 {
-    if (bodyId === 'sol') return Vec2Zero;
     const body = this.bodies.find(b => b.id === bodyId);
     if (!body || !body.elements) return Vec2Zero;
 
-    if (body.parentId && body.parentId !== 'sol') {
-      const parentPos = this.bodyPositionAtTime(body.parentId, t);
-      const localPos = keplerPositionAtTime(body.elements, t);
-      return vec2Add(parentPos, localPos);
+    if (body.parentId) {
+      const parent = this.bodies.find(b => b.id === body.parentId);
+      if (parent && parent.type !== 'star') {
+        const parentPos = this.bodyPositionAtTime(body.parentId, t);
+        const localPos = keplerPositionAtTime(body.elements, t);
+        return vec2Add(parentPos, localPos);
+      }
     }
 
     return keplerPositionAtTime(body.elements, t);
@@ -97,14 +140,61 @@ export class GameServer {
     for (const body of this.bodies) {
       if (body.elements === null) {
         this.bodyPositions.set(body.id, Vec2Zero);
-      } else if (body.parentId && body.parentId !== 'sol') {
-        const parentPos = this.bodyPositions.get(body.parentId) ?? Vec2Zero;
-        const localPos = keplerPositionAtTime(body.elements, this.gameTime);
-        this.bodyPositions.set(body.id, vec2Add(parentPos, localPos));
-      } else {
-        this.bodyPositions.set(body.id, keplerPositionAtTime(body.elements, this.gameTime));
+      } else if (body.parentId) {
+        const parent = this.bodies.find(b => b.id === body.parentId);
+        if (parent && parent.type !== 'star') {
+          const parentPos = this.bodyPositions.get(body.parentId) ?? Vec2Zero;
+          const localPos = keplerPositionAtTime(body.elements, this.gameTime);
+          this.bodyPositions.set(body.id, vec2Add(parentPos, localPos));
+        } else {
+          this.bodyPositions.set(body.id, keplerPositionAtTime(body.elements, this.gameTime));
+        }
       }
     }
+  }
+
+  // ── System randomization ────────────────────────────────────────
+
+  randomizeSystem(seed?: number): { seed: number; starName: string; planetCount: number; bodies: CelestialBody[] } {
+    const actualSeed = seed ?? Math.floor(Math.random() * 0xFFFFFFFF);
+    const system = generateSystem(actualSeed);
+    this.generatedSystem = system;
+    this.bodies = systemToBodies(system, this.gameTime);
+    this.updateBodyPositions();
+
+    // Reposition all ships
+    const startBodyId = findStartingBody(system);
+    for (const ship of this.ships) {
+      if (startBodyId) {
+        const bodyPos = this.getBodyPosition(startBodyId);
+        ship.position = vec2Add(bodyPos, vec2(ORBIT_VISUAL_RADIUS, 0));
+        ship.mode = 'orbit';
+        ship.orbitBodyId = startBodyId;
+        ship.orbitAngle = 0;
+      } else {
+        // No planets — place in drift at 2 AU * sqrt(luminosity)
+        const dist = 2 * 1.496e11 * Math.sqrt(system.star.luminositySolar);
+        ship.position = vec2(dist, 0);
+        ship.mode = 'drift';
+        ship.orbitBodyId = null;
+      }
+      ship.velocity = Vec2Zero;
+      ship.route = null;
+      ship.fuel = SHIP_FUEL_CAPACITY;
+    }
+
+    // Broadcast full refresh
+    this.broadcast('SYSTEM_CHANGED', {
+      seed: actualSeed,
+      snapshot: this.snapshot(),
+    });
+
+    return {
+      seed: actualSeed,
+      starName: system.star.name,
+      planetCount: system.planets.length,
+      bodies: this.bodies,
+    };
   }
 
   // ── Commands ─────────────────────────────────────────────────────
@@ -213,7 +303,7 @@ export class GameServer {
     const realDt = (now - this.lastTickTime) / 1000; // actual seconds elapsed
     this.lastTickTime = now;
 
-    const gameDt = realDt * this.timeCompression;
+    const gameDt = realDt * TIME_COMPRESSION;
     this.gameTime += gameDt;
     this.updateBodyPositions();
 
@@ -316,16 +406,28 @@ export class GameServer {
   snapshot(): SystemSnapshot {
     return {
       gameTime: this.gameTime,
-      timeCompression: this.timeCompression,
       bodies: this.bodies.map(b => ({
         id: b.id,
         name: b.name,
         type: b.type,
+        mass: b.mass,
         position: this.bodyPositions.get(b.id) ?? Vec2Zero,
         radius: b.radius,
         color: b.color,
         elements: b.elements,
         parentId: b.parentId,
+        planetClass: b.planetClass,
+        ...(b.type === 'star' && this.generatedSystem ? {
+          starInfo: {
+            spectralClass: this.generatedSystem.star.spectralClass,
+            spectralSubclass: this.generatedSystem.star.spectralSubclass,
+            luminosityClass: this.generatedSystem.star.luminosityClass,
+            surfaceTemperature: this.generatedSystem.star.surfaceTemperature,
+            luminositySolar: this.generatedSystem.star.luminositySolar,
+            massSolar: this.generatedSystem.star.mass / 1.989e30,
+            age: this.generatedSystem.star.age,
+          },
+        } : {}),
       })),
       ships: this.ships.map(s => this.shipSnapshot(s)),
     };

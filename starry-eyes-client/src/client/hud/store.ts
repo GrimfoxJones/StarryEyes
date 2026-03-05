@@ -4,7 +4,7 @@ import type { ISimulationBridge } from '../../bridge.ts';
 import { TAB_DEFAULTS } from './left-panel/tabConfig.ts';
 
 export type PrimaryTab = 'SYS' | 'CREW' | 'OPS' | 'DOCK';
-export type ObjectType = 'planet' | 'moon' | 'asteroid' | 'station' | 'ship';
+export type ObjectType = 'star' | 'planet' | 'moon' | 'asteroid' | 'station' | 'ship';
 
 export interface PopupState {
   objectId: string;

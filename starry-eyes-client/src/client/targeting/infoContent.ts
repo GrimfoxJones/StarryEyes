@@ -8,7 +8,6 @@ export interface InfoContent {
 }
 
 export function bodyTypeToObjectType(type: BodyType): ObjectType {
-  if (type === 'star') return 'planet';
   if (type === 'station') return 'station';
   return type as ObjectType;
 }
@@ -20,6 +19,8 @@ export function getInfoContent(
   shipPos?: { x: number; y: number },
 ): InfoContent {
   switch (objectType) {
+    case 'star':
+      return getStarContent(objectId, snapshot, shipPos);
     case 'planet':
     case 'moon':
     case 'asteroid':
@@ -28,6 +29,42 @@ export function getInfoContent(
     case 'ship':
       return getShipContent(objectId, snapshot);
   }
+}
+
+function getStarContent(
+  objectId: string,
+  snapshot: SystemSnapshot,
+  shipPos?: { x: number; y: number },
+): InfoContent {
+  const body = snapshot.bodies.find((b) => b.id === objectId);
+  if (!body) {
+    return { title: objectId, typeLabel: 'STAR', rows: [] };
+  }
+
+  const rows: { label: string; value: string }[] = [];
+
+  if (body.starInfo) {
+    const sc = body.starInfo.spectralClass;
+    const isSpecial = ['red_giant', 'white_dwarf', 'brown_dwarf', 'neutron_star', 't_tauri'].includes(sc);
+    rows.push({
+      label: 'Class',
+      value: isSpecial ? sc.replace(/_/g, ' ') : `${sc}${body.starInfo.spectralSubclass} ${body.starInfo.luminosityClass}`,
+    });
+    rows.push({ label: 'Temp', value: `${body.starInfo.surfaceTemperature.toFixed(0)} K` });
+  }
+
+  if (shipPos) {
+    const dx = body.position.x - shipPos.x;
+    const dy = body.position.y - shipPos.y;
+    const range = Math.sqrt(dx * dx + dy * dy);
+    rows.push({ label: 'Range', value: formatDistance(range) });
+  }
+
+  return {
+    title: body.name,
+    typeLabel: 'STAR',
+    rows,
+  };
 }
 
 function getBodyContent(
@@ -79,10 +116,21 @@ function getShipContent(objectId: string, snapshot: SystemSnapshot): InfoContent
   };
 }
 
+const CLASS_LABELS: Record<string, string> = {
+  rocky: 'Rocky',
+  super_earth: 'Super Earth',
+  mini_neptune: 'Mini Neptune',
+  gas_giant: 'Gas Giant',
+  ice_giant: 'Ice Giant',
+  dwarf: 'Dwarf',
+};
+
 function formatBodySubType(body: BodySnapshot): string {
+  if (body.type === 'star') return 'Star';
+  if (body.type === 'station') return 'Station';
+  if (body.planetClass) return CLASS_LABELS[body.planetClass] ?? body.planetClass;
   if (body.type === 'asteroid') return 'Asteroid';
   if (body.type === 'moon') return 'Moon';
-  if (body.type === 'station') return 'Station';
   return 'Rocky';
 }
 

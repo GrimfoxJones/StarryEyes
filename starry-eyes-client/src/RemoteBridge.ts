@@ -3,6 +3,7 @@ import type {
   SystemSnapshot,
   ShipSnapshot,
   BodySnapshot,
+  StarInfo,
   CelestialBody,
   Vec2,
 } from '@starryeyes/shared';
@@ -12,6 +13,7 @@ import {
   transitPositionAtTime,
   ORBIT_VISUAL_RADIUS,
   ORBIT_VISUAL_SPEED,
+  TIME_COMPRESSION,
   vec2Length,
   vec2Normalize,
   sampleRouteAhead,
@@ -27,7 +29,6 @@ interface JoinResponse {
   playerId: string;
   playerName: string;
   gameTime: number;
-  timeCompression: number;
 }
 
 interface BodiesResponse {
@@ -44,14 +45,14 @@ export class RemoteBridge implements ISimulationBridge {
   private bodies: CelestialBody[] = [];
   private lastServerGameTime = 0;
   private lastSnapshotRealTime = 0;
-  private timeCompression = 600;
   private lastShips: readonly ShipSnapshot[] = [];
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private reconnectDelay = 1000;
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   private heartbeatIntervalMs: number;
   private soiTable: SOIEntry[] = [];
-  private _soiParentId = 'sol';
+  private _soiParentId = 'sol'; // default; updated after connect
+  private starInfoMap = new Map<string, StarInfo>();
 
   constructor(serverUrl = '', heartbeatIntervalMs = 1000) {
     this.heartbeatIntervalMs = heartbeatIntervalMs;
@@ -94,7 +95,6 @@ export class RemoteBridge implements ISimulationBridge {
     this.sessionToken = join.sessionToken;
     this.shipId = join.shipId;
     this.lastServerGameTime = join.gameTime;
-    this.timeCompression = join.timeCompression;
     this.lastSnapshotRealTime = performance.now();
 
     // 2. Fetch body definitions
@@ -104,6 +104,10 @@ export class RemoteBridge implements ISimulationBridge {
 
     // Build SOI table for reference frame determination
     this.soiTable = buildSOITable(this.bodies);
+
+    // Set initial SOI parent to the star
+    const star = this.bodies.find(b => b.type === 'star');
+    if (star) this._soiParentId = star.id;
 
     // 3. Open WebSocket
     await this.openWebSocket();
@@ -163,18 +167,21 @@ export class RemoteBridge implements ISimulationBridge {
 
     const now = performance.now();
     const elapsedReal = (now - this.lastSnapshotRealTime) / 1000;
-    const localGameTime = this.lastServerGameTime + elapsedReal * this.timeCompression;
+    const localGameTime = this.lastServerGameTime + elapsedReal * TIME_COMPRESSION;
 
     // Compute body positions locally
     const bodySnapshots: BodySnapshot[] = this.bodies.map(b => ({
       id: b.id,
       name: b.name,
       type: b.type,
+      mass: b.mass,
       position: this.bodyPositionAtTime(b.id, localGameTime),
       radius: b.radius,
       color: b.color,
       elements: b.elements,
       parentId: b.parentId,
+      planetClass: b.planetClass,
+      ...(this.starInfoMap.has(b.id) ? { starInfo: this.starInfoMap.get(b.id)! } : {}),
     }));
 
     // Interpolate ship positions
@@ -255,17 +262,18 @@ export class RemoteBridge implements ISimulationBridge {
       for (const b of bodySnapshots) {
         bodyPositions.set(b.id, b.position);
       }
+      const starBody = this.bodies.find(b => b.type === 'star');
       this._soiParentId = determineSOIParent(
         myShip.position,
         this._soiParentId,
         this.soiTable,
         bodyPositions,
+        starBody?.id ?? 'sol',
       );
     }
 
     return {
       gameTime: localGameTime,
-      timeCompression: this.timeCompression,
       bodies: bodySnapshots,
       ships,
     };
@@ -351,15 +359,42 @@ export class RemoteBridge implements ISimulationBridge {
         this.pushInterpolatedSnapshot();
         break;
       }
+
+      case 'SYSTEM_CHANGED': {
+        const data = msg.data as { seed: number; snapshot: SystemSnapshot };
+        // Refresh body definitions from the new snapshot
+        this.bodies = data.snapshot.bodies.map(b => ({
+          id: b.id,
+          name: b.name,
+          type: b.type,
+          mass: b.mass,
+          radius: b.radius,
+          color: b.color,
+          parentId: b.parentId,
+          planetClass: b.planetClass,
+          elements: b.elements,
+        }));
+        this.soiTable = buildSOITable(this.bodies);
+        this.starInfoMap.clear();
+        const star = this.bodies.find(b => b.type === 'star');
+        if (star) this._soiParentId = star.id;
+        this.applyServerSnapshot(data.snapshot);
+        break;
+      }
     }
   }
 
   private applyServerSnapshot(state: SystemSnapshot): void {
     this.lastServerGameTime = state.gameTime;
     this.lastSnapshotRealTime = performance.now();
-    this.timeCompression = state.timeCompression;
     this.lastShips = state.ships;
     this.latestSnapshot = state;
+
+    // Cache starInfo from server snapshots
+    for (const b of state.bodies) {
+      if (b.starInfo) this.starInfoMap.set(b.id, b.starInfo);
+    }
+
     this.notifyCallbacks(state);
   }
 
@@ -412,14 +447,16 @@ export class RemoteBridge implements ISimulationBridge {
   // ── Body position helpers (client-side Kepler) ───────────────────
 
   private bodyPositionAtTime(bodyId: string, t: number): Vec2 {
-    if (bodyId === 'sol') return Vec2Zero;
     const body = this.bodies.find(b => b.id === bodyId);
     if (!body || !body.elements) return Vec2Zero;
 
-    if (body.parentId && body.parentId !== 'sol') {
-      const parentPos = this.bodyPositionAtTime(body.parentId, t);
-      const localPos = keplerPositionAtTime(body.elements, t);
-      return vec2Add(parentPos, localPos);
+    if (body.parentId) {
+      const parent = this.bodies.find(b => b.id === body.parentId);
+      if (parent && parent.type !== 'star') {
+        const parentPos = this.bodyPositionAtTime(body.parentId, t);
+        const localPos = keplerPositionAtTime(body.elements, t);
+        return vec2Add(parentPos, localPos);
+      }
     }
 
     return keplerPositionAtTime(body.elements, t);

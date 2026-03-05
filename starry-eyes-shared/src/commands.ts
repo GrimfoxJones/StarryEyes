@@ -7,7 +7,6 @@ export interface ISystemContext {
   ships: ShipState[];
   bodies: CelestialBody[];
   gameTime: number;
-  timeCompression: number;
   bodyPositionAtTime(bodyId: string, t: number): Vec2;
   bodyVelocityAtTime(bodyId: string, t: number): Vec2;
 }

@@ -127,6 +127,20 @@ export class BodyRenderer {
         this.bodyGraphics.delete(id);
       }
     }
+    for (const [id, gfx] of this.orbitGraphics) {
+      if (!usedIds.has(id)) {
+        this.container.removeChild(gfx);
+        gfx.destroy();
+        this.orbitGraphics.delete(id);
+      }
+    }
+    for (const [id, txt] of this.labelTexts) {
+      if (!usedIds.has(id)) {
+        this.container.removeChild(txt);
+        txt.destroy();
+        this.labelTexts.delete(id);
+      }
+    }
   }
 
   private drawBody(gfx: Graphics, body: BodySnapshot, camera: Camera, moonAlpha = 1): void {

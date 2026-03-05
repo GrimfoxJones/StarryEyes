@@ -20,7 +20,6 @@ export function authRoutes(sessions: SessionStore, game: GameServer, _broadcast:
       playerId: session.playerId,
       playerName: session.playerName,
       gameTime: game.gameTime,
-      timeCompression: game.timeCompression,
     });
   });
 

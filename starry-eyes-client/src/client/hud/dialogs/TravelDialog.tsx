@@ -1,6 +1,7 @@
 import { useGameStore } from '../store.ts';
 import { vec2Dist } from '@starryeyes/shared';
 import { brachistochroneTime } from '@starryeyes/shared';
+import { TIME_COMPRESSION } from '@starryeyes/shared';
 import { formatEta, formatDistance } from '../format.ts';
 import './TravelDialog.css';
 
@@ -29,7 +30,7 @@ export function TravelDialog() {
 
   const distance = vec2Dist(ship.position, targetPos);
   const gameEta = brachistochroneTime(distance, accelMs2);
-  const realEta = gameEta / snapshot.timeCompression;
+  const realEta = gameEta / TIME_COMPRESSION;
 
   // Fuel burn: scale consumption rate by accel ratio, multiply by time
   // ship.fuelConsumptionRate is at full thrust (1g). Scale linearly by accelG.
@@ -64,12 +65,10 @@ export function TravelDialog() {
             <span className="travel-dialog-label">GAME ETA</span>
             <span className="travel-dialog-value">{formatEta(gameEta)}</span>
           </div>
-          {snapshot.timeCompression > 1 && (
-            <div className="travel-dialog-row">
-              <span className="travel-dialog-label">REAL ETA</span>
-              <span className="travel-dialog-value travel-dialog-dim">{formatEta(realEta)}</span>
-            </div>
-          )}
+          <div className="travel-dialog-row">
+            <span className="travel-dialog-label">REAL ETA</span>
+            <span className="travel-dialog-value travel-dialog-dim">{formatEta(realEta)}</span>
+          </div>
           <div className="travel-dialog-row">
             <span className="travel-dialog-label">FUEL BURN</span>
             <span className={`travel-dialog-value${insufficientFuel ? ' travel-dialog-danger' : ''}`}>

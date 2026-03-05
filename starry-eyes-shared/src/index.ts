@@ -7,3 +7,4 @@ export * from './nav.js';
 export * from './soi.js';
 export * from './bodies.js';
 export * from './commands.js';
+export * from './procgen/index.js';

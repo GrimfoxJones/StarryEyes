@@ -85,6 +85,7 @@ export interface CelestialBody {
   readonly parentId: string | null;
   readonly type: BodyType;
   readonly color: number;      // hex color for rendering
+  readonly planetClass?: string;
 }
 
 // ── Nav Computer Types ──────────────────────────────────────────────
@@ -127,15 +128,28 @@ export interface ShipState {
 
 // ── Snapshots (serialization-friendly) ──────────────────────────────
 
+export interface StarInfo {
+  readonly spectralClass: string;
+  readonly spectralSubclass: number;
+  readonly luminosityClass: string;
+  readonly surfaceTemperature: number;
+  readonly luminositySolar: number;
+  readonly massSolar: number;
+  readonly age: number;
+}
+
 export interface BodySnapshot {
   readonly id: string;
   readonly name: string;
   readonly type: BodyType;
+  readonly mass: number;
   readonly position: Vec2;
   readonly radius: number;
   readonly color: number;
   readonly elements: OrbitalElements | null;
   readonly parentId: string | null;
+  readonly starInfo?: StarInfo;
+  readonly planetClass?: string;
 }
 
 export interface ShipSnapshot {
@@ -160,7 +174,6 @@ export interface SystemSnapshot {
   readonly gameTime: number;
   readonly bodies: readonly BodySnapshot[];
   readonly ships: readonly ShipSnapshot[];
-  readonly timeCompression: number;
 }
 
 // ── Player Commands ─────────────────────────────────────────────────

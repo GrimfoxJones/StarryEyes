@@ -110,6 +110,46 @@
   letter-spacing: 0.5px;
 }
 
+.hud-bottom-right {
+  bottom: 16px;
+  right: 16px;
+  text-align: right;
+}
+
+.hud-seed-input {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
+  background: var(--bar-bg);
+  color: var(--text-bright);
+  border: 1px solid var(--border-subtle);
+  border-radius: 3px;
+  padding: 4px 8px;
+  width: 80px;
+  outline: none;
+}
+
+.hud-seed-input::placeholder {
+  color: var(--text-hint);
+}
+
+.hud-btn {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
+  background: var(--border-subtle);
+  color: var(--text-bright);
+  border: 1px solid var(--text-label);
+  border-radius: 3px;
+  padding: 4px 10px;
+  cursor: pointer;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  transition: background 0.15s;
+}
+
+.hud-btn:hover {
+  background: var(--text-label);
+}
+
 @keyframes blink {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.4; }

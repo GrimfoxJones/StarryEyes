@@ -13,6 +13,7 @@ import {
   SHIP_FUEL_CAPACITY,
   ORBIT_VISUAL_RADIUS,
   ORBIT_VISUAL_SPEED,
+  TIME_COMPRESSION,
   createDefaultBodies,
   createPlayerShip,
   processCommand,
@@ -24,14 +25,12 @@ export class StarSystem {
   bodies: CelestialBody[];
   ships: ShipState[];
   gameTime: number;
-  timeCompression: number;
 
   bodyPositions: Map<string, Vec2> = new Map();
 
   constructor() {
     this.bodies = createDefaultBodies();
     this.gameTime = 0;
-    this.timeCompression = 1000;
     this.updateBodyPositions();
     this.ships = [createPlayerShip(this.bodies, this.gameTime)];
   }
@@ -121,8 +120,7 @@ export class StarSystem {
             break;
           }
 
-          // Use real dt for smooth visual rotation regardless of time compression
-          const realDt = dt / this.timeCompression;
+          const realDt = dt / TIME_COMPRESSION;
           ship.orbitAngle += ORBIT_VISUAL_SPEED * realDt;
 
           const bodyPos = this.getBodyPosition(ship.orbitBodyId);
@@ -147,7 +145,6 @@ export class StarSystem {
   snapshot(): SystemSnapshot {
     return {
       gameTime: this.gameTime,
-      timeCompression: this.timeCompression,
       bodies: this.bodies.map(b => ({
         id: b.id,
         name: b.name,

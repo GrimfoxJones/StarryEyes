@@ -9,10 +9,11 @@ interface ModalContentProps {
 
 export function ModalContent({ objectId, objectType }: ModalContentProps) {
   switch (objectType) {
+    case 'star':
     case 'planet':
     case 'moon':
     case 'asteroid':
-      return <PlanetDetail objectId={objectId} />;
+      return <PlanetDetail objectId={objectId} objectType={objectType} />;
     case 'station':
       return <StationDetail objectId={objectId} />;
     case 'ship':

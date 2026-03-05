@@ -78,6 +78,7 @@ export function determineSOIParent(
   currentParentId: string,
   soiTable: readonly SOIEntry[],
   bodyPositions: Map<string, Vec2>,
+  starId = 'sol',
 ): string {
   // Check all SOI bodies from innermost (moons) to outermost (planets)
   for (const entry of soiTable) {
@@ -97,7 +98,7 @@ export function determineSOIParent(
     }
   }
 
-  return 'sol';
+  return starId;
 }
 
 // ── Lookup helpers ───────────────────────────────────────────────────

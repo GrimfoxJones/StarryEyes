@@ -28,8 +28,8 @@ async function boot() {
   useGameStore.getState().setBridge(bridge);
 
   // Build SOI table (planets only) for camera reference frame
-  const allSOIs = buildSOITable(bridge.getBodies());
-  const planetSOIs: SOIEntry[] = allSOIs.filter(e => e.body.type === 'planet');
+  let lastBodies = bridge.getBodies();
+  let planetSOIs: SOIEntry[] = buildSOITable(lastBodies).filter(e => e.body.type === 'planet');
 
   // Renderer
   const renderer = new GameRenderer(app);
@@ -63,6 +63,18 @@ async function boot() {
     // Find our ship
     const myShipId = bridge.getMyShipId();
     const myShip = snapshot.ships.find(s => s.id === myShipId);
+
+    // Refresh SOI table if bodies changed (e.g., after system randomization)
+    const currentBodies = bridge.getBodies();
+    if (currentBodies !== lastBodies) {
+      lastBodies = currentBodies;
+      planetSOIs = buildSOITable(currentBodies).filter(e => e.body.type === 'planet');
+      trail.clear();
+      renderer.camera.focusTarget = null;
+      renderer.camera.referenceBodyId = currentBodies.find(b => b.type === 'star')?.id ?? 'sol';
+      renderer.camera.referenceOffset = { x: 0, y: 0 };
+      renderer.camera.initForSystem();
+    }
 
     // Update camera reference frame based on what the camera is looking at
     renderer.camera.updateReferenceFrame(snapshot.bodies, planetSOIs);

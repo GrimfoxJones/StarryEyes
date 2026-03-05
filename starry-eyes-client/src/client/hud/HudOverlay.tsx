@@ -1,14 +1,40 @@
+import { useState, useCallback } from 'react';
 import { useGameStore } from './store.ts';
 import { LeftPanel } from './left-panel/LeftPanel.tsx';
 import { DetailModal } from './modals/DetailModal.tsx';
 import { TravelDialog } from './dialogs/TravelDialog.tsx';
-import { formatGameTime, formatCompression, formatSpeed, formatEta } from './format.ts';
+import { formatGameTime, formatSpeed, formatEta } from './format.ts';
+import { TIME_COMPRESSION } from '@starryeyes/shared';
 import './theme.css';
 import './hud.css';
 
 export function HudOverlay() {
   const snapshot = useGameStore((s) => s.snapshot);
   const leftPanelOpen = useGameStore((s) => s.leftPanelOpen);
+  const [seedInput, setSeedInput] = useState('');
+  const [systemInfo, setSystemInfo] = useState<{ starName: string; seed: number } | null>(null);
+
+  const handleRandomize = useCallback(async () => {
+    const body: { seed?: number } = {};
+    if (seedInput.trim()) {
+      const parsed = parseInt(seedInput.trim(), 10);
+      if (!isNaN(parsed)) body.seed = parsed;
+    }
+    try {
+      const res = await fetch('/api/debug/randomize-system', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (res.ok) {
+        const data = await res.json() as { seed: number; starName: string; planetCount: number };
+        setSystemInfo({ starName: data.starName, seed: data.seed });
+        setSeedInput('');
+      }
+    } catch {
+      // ignore network errors
+    }
+  }, [seedInput]);
 
   if (!snapshot) return null;
 
@@ -23,10 +49,6 @@ export function HudOverlay() {
       <div className={`hud-panel hud-top-left${leftPanelOpen ? ' panel-open' : ''}`}>
         <div className="hud-label">GAME TIME</div>
         <div className="hud-value">{formatGameTime(snapshot.gameTime)}</div>
-        <div className="hud-row">
-          <span className="hud-label">WARP</span>
-          <span className="hud-value">{formatCompression(snapshot.timeCompression)}</span>
-        </div>
       </div>
 
       {/* Top-right: Mode / Velocity / Destination / ETA */}
@@ -50,12 +72,10 @@ export function HudOverlay() {
                 <span className="hud-label">ETA</span>
                 <span className="hud-value">{formatEta(ship.eta)}</span>
               </div>
-              {snapshot.timeCompression > 1 && (
-                <div className="hud-row">
-                  <span className="hud-label">REAL</span>
-                  <span className="hud-value hud-dim">{formatEta(ship.eta / snapshot.timeCompression)}</span>
-                </div>
-              )}
+              <div className="hud-row">
+                <span className="hud-label">REAL</span>
+                <span className="hud-value hud-dim">{formatEta(ship.eta / TIME_COMPRESSION)}</span>
+              </div>
             </>
           )}
           {ship.isDecelerating && (
@@ -82,6 +102,33 @@ export function HudOverlay() {
           <div className="hud-hint">Right-click=destination ESC=cancel</div>
         </div>
       )}
+
+      {/* Bottom-right: Seed / Randomize */}
+      <div className="hud-panel hud-bottom-right">
+        {systemInfo && (
+          <div className="hud-row">
+            <span className="hud-label">SYSTEM</span>
+            <span className="hud-value">{systemInfo.starName}</span>
+          </div>
+        )}
+        {systemInfo && (
+          <div className="hud-row">
+            <span className="hud-label">SEED</span>
+            <span className="hud-value hud-dim">{systemInfo.seed}</span>
+          </div>
+        )}
+        <div className="hud-row" style={{ gap: '4px', marginTop: '4px' }}>
+          <input
+            className="hud-seed-input"
+            type="text"
+            placeholder="seed"
+            value={seedInput}
+            onChange={(e) => setSeedInput(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') handleRandomize(); }}
+          />
+          <button className="hud-btn" onClick={handleRandomize}>RANDOMIZE</button>
+        </div>
+      </div>
 
       {/* Detail modal */}
       <DetailModal />

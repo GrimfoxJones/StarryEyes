@@ -52,14 +52,31 @@ export class InfoBox {
   private border = new Graphics();
   private contentContainer = new Container();
   private moreText: Text;
+  private flyToText: Text;
 
   private currentObjectId: string | null = null;
   private currentObjectType: ObjectType | null = null;
+  private currentObjectName: string | null = null;
 
   constructor() {
     this.container.addChild(this.bg);
     this.container.addChild(this.border);
     this.container.addChild(this.contentContainer);
+
+    // [Fly To] button
+    this.flyToText = new Text({ text: '[Fly To]', style: MORE_STYLE });
+    this.flyToText.eventMode = 'static';
+    this.flyToText.cursor = 'pointer';
+    this.flyToText.on('pointerdown', () => {
+      if (this.currentObjectId && this.currentObjectType) {
+        useGameStore.getState().showTravelDialog({
+          destination: { type: 'body', bodyId: this.currentObjectId },
+          targetName: this.currentObjectName ?? this.currentObjectId,
+          accelerationG: 1.0,
+        });
+      }
+    });
+    this.container.addChild(this.flyToText);
 
     // [More →] button
     this.moreText = new Text({ text: '[More →]', style: MORE_STYLE });
@@ -101,6 +118,7 @@ export class InfoBox {
     this.container.visible = true;
     this.currentObjectId = objectId;
     this.currentObjectType = objectType;
+    this.currentObjectName = content.title;
 
     // Clear previous content
     this.contentContainer.removeChildren();
@@ -147,7 +165,15 @@ export class InfoBox {
 
     y += 4;
 
-    // [More →]
+    // [Fly To] on the left (hidden for stars and ships)
+    const canFlyTo = objectType !== 'star' && objectType !== 'ship';
+    this.flyToText.visible = canFlyTo;
+    if (canFlyTo) {
+      this.flyToText.x = PADDING;
+      this.flyToText.y = y;
+    }
+
+    // [More →] on the right
     this.moreText.x = BOX_WIDTH - PADDING - this.moreText.width;
     this.moreText.y = y;
     y += ROW_HEIGHT + 2;

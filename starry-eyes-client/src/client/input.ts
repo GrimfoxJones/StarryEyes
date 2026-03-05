@@ -182,7 +182,6 @@ function handleLeftClick(
   let nearestDist = Infinity;
 
   for (const body of snapshot.bodies) {
-    if (body.type === 'star') continue;
     if (isMoonHidden(body, snapshot.bodies, camera)) continue;
     const screenPos = camera.simToScreen(body.position.x, body.position.y);
     const dx = screenPos.x - clickX;

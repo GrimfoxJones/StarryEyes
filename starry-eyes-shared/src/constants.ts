@@ -6,10 +6,9 @@ export const G = 6.674e-11; // m³/(kg·s²)
 export const STAR_MU = 1.327124e20; // m³/s² (Sun)
 export const STAR_MASS = 1.989e30;  // kg (Sun)
 
-// ── Time compression ────────────────────────────────────────────────
-// Real Earth orbit = 3.156e7s. At 50,000x → ~10.5 min real time.
-export const TIME_COMPRESSION_STEPS = [1, 10, 100, 1000, 5000, 10000, 50000, 100000] as const;
-export const DEFAULT_TIME_COMPRESSION = 10000;
+// ── Time compression (fixed) ────────────────────────────────────────
+// At 365x, 1 real day ≈ 1 Earth year in-game.
+export const TIME_COMPRESSION = 365;
 
 // ── Physics substeps ────────────────────────────────────────────────
 export const MAX_SUBSTEP_DT = 30; // game-seconds per substep

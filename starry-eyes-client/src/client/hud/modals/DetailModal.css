@@ -68,6 +68,121 @@
   color: var(--text-primary);
 }
 
+/* Detail content styles */
+.detail-loading {
+  color: var(--text-hint);
+  text-align: center;
+  padding: 32px 0;
+  font-style: italic;
+  font-size: var(--font-size-sm);
+}
+
+.detail-error {
+  color: var(--accent-warn, #c44);
+  text-align: center;
+  padding: 32px 0;
+  font-size: var(--font-size-sm);
+}
+
+.detail-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.detail-section-title {
+  color: var(--accent-cyan);
+  font-size: var(--font-size-sm);
+  letter-spacing: 1px;
+  margin-bottom: 6px;
+  border-bottom: 1px solid var(--border-subtle);
+  padding-bottom: 4px;
+}
+
+.detail-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 3px 0;
+  font-size: var(--font-size-md);
+}
+
+.detail-row-label {
+  color: var(--text-label);
+}
+
+.detail-row-value {
+  color: var(--text-primary);
+}
+
+.detail-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.detail-tag {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 3px;
+  font-size: var(--font-size-xs, 11px);
+  letter-spacing: 0.5px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-label);
+}
+
+.detail-tag--hazard {
+  border-color: rgba(204, 68, 68, 0.4);
+  color: #c44;
+}
+
+.detail-tag--biome {
+  border-color: rgba(68, 204, 136, 0.3);
+  color: #4c8;
+}
+
+.detail-resource-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 3px 0;
+  font-size: var(--font-size-md);
+}
+
+.detail-resource-level {
+  text-transform: uppercase;
+  font-size: var(--font-size-sm);
+  letter-spacing: 0.5px;
+}
+
+.detail-resource-level[data-level="none"] { color: var(--text-hint); }
+.detail-resource-level[data-level="trace"] { color: #666; }
+.detail-resource-level[data-level="poor"] { color: #886; }
+.detail-resource-level[data-level="moderate"] { color: #aa8; }
+.detail-resource-level[data-level="rich"] { color: #ad6; }
+.detail-resource-level[data-level="exceptional"] { color: #4dd; }
+
+.detail-gas-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 2px 0;
+  font-size: var(--font-size-sm);
+}
+
+.detail-gas-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.detail-gas-fill {
+  height: 4px;
+  background: var(--accent-cyan);
+  border-radius: 2px;
+  opacity: 0.6;
+}
+
 @keyframes modal-fade-in {
   from { opacity: 0; }
   to { opacity: 1; }

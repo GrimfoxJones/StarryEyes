@@ -75,8 +75,11 @@ export class Camera {
     const helioX = this.x + this.referenceOffset.x;
     const helioY = this.y + this.referenceOffset.y;
 
+    // Determine the star ID (fallback for "no planet SOI")
+    const starId = bodies.find(b => b.type === 'star')?.id ?? this.referenceBodyId;
+
     // Find which planet SOI the camera center is inside
-    let newRefId = 'sol';
+    let newRefId = starId;
     for (const entry of planetSOIs) {
       const body = bodies.find(b => b.id === entry.bodyId);
       if (!body) continue;
@@ -94,9 +97,11 @@ export class Camera {
       }
     }
 
+    const isNewRefStar = bodies.find(b => b.id === newRefId)?.type === 'star';
+
     if (newRefId === this.referenceBodyId) {
       // Same reference body — update its position (it moves each frame)
-      if (newRefId !== 'sol') {
+      if (!isNewRefStar) {
         const body = bodies.find(b => b.id === newRefId);
         if (body) {
           const dx = body.position.x - this.referenceOffset.x;
@@ -110,7 +115,7 @@ export class Camera {
     }
 
     // Reference body changed — adjust camera so the view doesn't jump
-    const newOffset = newRefId === 'sol'
+    const newOffset = isNewRefStar
       ? { x: 0, y: 0 }
       : (bodies.find(b => b.id === newRefId)?.position ?? { x: 0, y: 0 });
 

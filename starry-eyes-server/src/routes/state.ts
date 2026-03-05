@@ -19,12 +19,63 @@ export function stateRoutes(game: GameServer, sessions: SessionStore): Router {
       color: b.color,
       elements: b.elements,
       parentId: b.parentId,
+      planetClass: b.planetClass,
     }));
     res.json({ bodies });
   });
 
   router.get('/ships', (_req, res) => {
     res.json({ ships: game.ships.map(s => game.shipSnapshot(s)) });
+  });
+
+  // On-demand detail for a single body (procgen data)
+  router.get('/bodies/:id/detail', (req, res) => {
+    const id = req.params.id;
+    const sys = game.generatedSystem;
+    if (!sys) {
+      res.status(404).json({ error: 'No generated system' });
+      return;
+    }
+
+    // Star
+    if (sys.star.id === id) {
+      res.json({ type: 'star', data: sys.star });
+      return;
+    }
+
+    // Planets
+    for (const planet of sys.planets) {
+      if (planet.id === id) {
+        // Strip full moon data, return only id/name list
+        const { moons, ...rest } = planet;
+        res.json({
+          type: 'planet',
+          data: {
+            ...rest,
+            moons: moons.map(m => ({ id: m.id, name: m.name })),
+          },
+        });
+        return;
+      }
+
+      // Moons
+      for (const moon of planet.moons) {
+        if (moon.id === id) {
+          res.json({ type: 'moon', parentPlanet: planet.name, data: moon });
+          return;
+        }
+      }
+    }
+
+    // Asteroids
+    for (const asteroid of sys.asteroids) {
+      if (asteroid.id === id) {
+        res.json({ type: 'asteroid', data: asteroid });
+        return;
+      }
+    }
+
+    res.status(404).json({ error: 'Body not found' });
   });
 
   // Lightweight sync endpoint — returns server gameTime + the player's ship

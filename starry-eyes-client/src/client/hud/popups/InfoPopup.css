@@ -52,21 +52,34 @@
   font-size: var(--font-size-sm);
 }
 
+.info-popup-footer {
+  display: flex;
+  justify-content: space-between;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.info-popup-fly-to,
 .info-popup-more {
-  display: block;
-  width: 100%;
   padding: 6px 10px;
   border: none;
-  border-top: 1px solid var(--border-subtle);
   background: none;
   color: var(--accent-cyan);
   font-family: var(--font-mono);
   font-size: var(--font-size-sm);
   cursor: pointer;
-  text-align: right;
   letter-spacing: 0.5px;
 }
 
+.info-popup-fly-to {
+  text-align: left;
+}
+
+.info-popup-more {
+  text-align: right;
+  margin-left: auto;
+}
+
+.info-popup-fly-to:hover,
 .info-popup-more:hover {
   background: var(--bg-hover);
 }
