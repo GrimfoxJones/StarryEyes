@@ -49,8 +49,11 @@ function getPrimaryValue(node: SubsystemNode): string {
 
   for (const sv of Object.values(node.values)) {
     if (typeof sv.value === 'string') return sv.value;
-    if (typeof sv.value === 'number' && sv.displayHint === 'bar' && (sv.max ?? 1) <= 1) {
-      return `${(sv.value * 100).toFixed(0)}%`;
+    if (typeof sv.value === 'number' && sv.displayHint === 'bar') {
+      const min = sv.min ?? 0;
+      const max = sv.max ?? 1;
+      const pct = max > min ? ((sv.value - min) / (max - min)) * 100 : 0;
+      return `${pct.toFixed(0)}%`;
     }
   }
   return node.status;
@@ -70,6 +73,7 @@ const FALLBACK_SUBSYSTEMS: SubsystemRow[] = [
 
 export function SysOverview() {
   const setActiveSubTab = useGameStore((s) => s.setActiveSubTab);
+  const setHoveredSubTab = useGameStore((s) => s.setHoveredSubTab);
   const snapshot = useGameStore((s) => s.subsystemSnapshot);
 
   const rows: SubsystemRow[] = snapshot
@@ -104,8 +108,8 @@ export function SysOverview() {
             cursor: 'pointer',
             borderRadius: 3,
           }}
-          onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-hover)'; }}
-          onMouseLeave={(e) => { e.currentTarget.style.background = 'none'; }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-hover)'; setHoveredSubTab(sys.id); }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = 'none'; setHoveredSubTab(null); }}
         >
           <StatusDot status={sys.status} />
           <span style={{

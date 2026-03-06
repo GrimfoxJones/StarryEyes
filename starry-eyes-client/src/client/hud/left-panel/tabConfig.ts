@@ -14,19 +14,15 @@ export interface TabDef {
 
 export const TABS: TabDef[] = [
   {
-    id: 'SYS',
-    label: 'SYS',
+    id: 'OPS',
+    label: 'OPS',
     subTabs: [
-      { id: 'OVERVIEW', label: 'OVERVIEW', description: 'Ship systems status dashboard' },
-      { id: 'NAV', label: 'NAV', description: 'Navigation computer & waypoints' },
-      { id: 'DRIVE', label: 'DRIVE', description: 'Main drive status & thrust control' },
-      { id: 'REACTOR', label: 'REACTOR', description: 'Reactor output & fuel consumption' },
-      { id: 'THERMAL', label: 'THERMAL', description: 'Heat management & radiators' },
-      { id: 'SENSORS', label: 'SENSORS', description: 'Sensor array & contact tracking' },
-      { id: 'PROPELLANT', label: 'FUEL', description: 'Fuel tanks & reserves' },
-      { id: 'CARGO', label: 'CARGO', description: 'Cargo hold manifest & capacity' },
-      { id: 'COMMS', label: 'COMMS', description: 'Communications & transponder' },
-      { id: 'STRUCTURAL', label: 'STRUCT.', description: 'Hull integrity & damage control' },
+      { id: 'OVERVIEW', label: 'OVERVIEW', description: 'Active operations summary' },
+      { id: 'TRADE', label: 'TRADE', description: 'Trade log & transaction history' },
+      { id: 'MINING', label: 'MINING', description: 'Mining laser & extraction ops' },
+      { id: 'SCAN', label: 'SCAN', description: 'Asteroid & body scanning' },
+      { id: 'PROBES', label: 'PROBES', description: 'Deployed probes & telemetry' },
+      { id: 'MISSIONS', label: 'MISSIONS', description: 'Active mission log & objectives' },
     ],
   },
   {
@@ -41,18 +37,6 @@ export const TABS: TabDef[] = [
     ],
   },
   {
-    id: 'OPS',
-    label: 'OPS',
-    subTabs: [
-      { id: 'OVERVIEW', label: 'OVERVIEW', description: 'Active operations summary' },
-      { id: 'TRADE', label: 'TRADE', description: 'Trade log & transaction history' },
-      { id: 'MINING', label: 'MINING', description: 'Mining laser & extraction ops' },
-      { id: 'SCAN', label: 'SCAN', description: 'Asteroid & body scanning' },
-      { id: 'PROBES', label: 'PROBES', description: 'Deployed probes & telemetry' },
-      { id: 'MISSIONS', label: 'MISSIONS', description: 'Active mission log & objectives' },
-    ],
-  },
-  {
     id: 'DOCK',
     label: 'DOCK',
     subTabs: [
@@ -61,6 +45,22 @@ export const TABS: TabDef[] = [
       { id: 'REFUEL', label: 'REFUEL', description: 'Propellant & reactor fuel' },
       { id: 'REPAIR', label: 'REPAIR', description: 'Hull & systems repair bay' },
       { id: 'CREW_HIRE', label: 'HIRE', description: 'Recruit new crew members' },
+    ],
+  },
+  {
+    id: 'SYS',
+    label: 'SYS',
+    subTabs: [
+      { id: 'OVERVIEW', label: 'OVERVIEW', description: 'Ship systems status dashboard' },
+      { id: 'NAV', label: 'NAV', description: 'Navigation computer & waypoints' },
+      { id: 'DRIVE', label: 'DRIVE', description: 'Main drive status & thrust control' },
+      { id: 'REACTOR', label: 'REACTOR', description: 'Reactor output & fuel consumption' },
+      { id: 'THERMAL', label: 'THERMAL', description: 'Heat management & radiators' },
+      { id: 'SENSORS', label: 'SENSORS', description: 'Sensor array & contact tracking' },
+      { id: 'PROPELLANT', label: 'FUEL', description: 'Fuel tanks & reserves' },
+      { id: 'CARGO', label: 'CARGO', description: 'Cargo hold manifest & capacity' },
+      { id: 'COMMS', label: 'COMMS', description: 'Communications & transponder' },
+      { id: 'STRUCTURAL', label: 'STRUCT.', description: 'Hull integrity & damage control' },
     ],
   },
 ];

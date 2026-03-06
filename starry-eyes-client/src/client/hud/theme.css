@@ -56,7 +56,8 @@
   --z-modal: 50;
 
   /* Layout */
-  --left-panel-width: 414px;
+  --left-panel-width: 456px;
+  --left-panel-width-sys: 768px;
   --panel-radius: 4px;
   --panel-padding: 10px 14px;
   --transition-speed: 0.3s;

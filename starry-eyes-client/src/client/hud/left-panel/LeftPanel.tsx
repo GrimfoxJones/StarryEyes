@@ -3,17 +3,21 @@ import { TabBar } from './TabBar.tsx';
 import { Breadcrumb } from './Breadcrumb.tsx';
 import { SubTabNav } from './SubTabNav.tsx';
 import { TabContent } from './TabContent.tsx';
+import { SchematicPanel } from '../schematics/SchematicPanel.tsx';
 import './LeftPanel.css';
 
 export function LeftPanel() {
   const open = useGameStore((s) => s.leftPanelOpen);
+  const activeTab = useGameStore((s) => s.activeTab);
   const toggleLeftPanel = useGameStore((s) => s.toggleLeftPanel);
+  const isSys = activeTab === 'SYS';
 
   return (
     <div className="left-panel-container">
-      <div className={`left-panel${open ? ' open' : ''}`}>
+      <div className={`left-panel${open ? ' open' : ''}${isSys ? ' sys' : ''}`}>
         <TabBar />
         <Breadcrumb />
+        <SchematicPanel />
         <div className="left-panel-body">
           <SubTabNav />
           <div className="left-panel-content">
@@ -22,7 +26,7 @@ export function LeftPanel() {
         </div>
       </div>
       <button
-        className={`left-panel-toggle${open ? ' open' : ''}`}
+        className={`left-panel-toggle${open ? ' open' : ''}${isSys ? ' sys' : ''}`}
         onClick={toggleLeftPanel}
         title="Toggle panel (Tab)"
       >

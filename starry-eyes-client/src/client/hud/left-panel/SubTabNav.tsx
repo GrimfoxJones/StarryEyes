@@ -5,7 +5,9 @@ export function SubTabNav() {
   const activeTab = useGameStore((s) => s.activeTab);
   const activeSubTab = useGameStore((s) => s.activeSubTab);
   const setActiveSubTab = useGameStore((s) => s.setActiveSubTab);
+  const setHoveredSubTab = useGameStore((s) => s.setHoveredSubTab);
   const tabDef = getTabDef(activeTab);
+  const isSys = activeTab === 'SYS';
 
   return (
     <div style={{
@@ -22,6 +24,8 @@ export function SubTabNav() {
           <button
             key={sub.id}
             onClick={() => setActiveSubTab(sub.id)}
+            onMouseEnter={isSys ? () => setHoveredSubTab(sub.id) : undefined}
+            onMouseLeave={isSys ? () => setHoveredSubTab(null) : undefined}
             style={{
               background: isActive ? 'var(--bg-active)' : 'none',
               border: 'none',
