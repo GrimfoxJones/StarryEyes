@@ -37,7 +37,7 @@ setupWebSocket(server, sessions, game, broadcast);
 app.use('/api/auth', authRoutes(sessions, game, broadcast));
 app.use('/api', stateRoutes(game, sessions));
 app.use('/api/commands', commandRoutes(sessions, game));
-app.use('/api/debug', debugRoutes(game));
+app.use('/api/debug', debugRoutes(game, sessions));
 
 // Health check
 app.get('/api/health', (_req, res) => {

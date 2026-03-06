@@ -1,6 +1,6 @@
-import { useState, useCallback } from 'react';
 import { useGameStore } from './store.ts';
 import { LeftPanel } from './left-panel/LeftPanel.tsx';
+import { DebugPanel } from './debug/DebugPanel.tsx';
 import { DetailModal } from './modals/DetailModal.tsx';
 import { TravelDialog } from './dialogs/TravelDialog.tsx';
 import { GateDialog } from './dialogs/GateDialog.tsx';
@@ -12,50 +12,30 @@ import './hud.css';
 export function HudOverlay() {
   const snapshot = useGameStore((s) => s.snapshot);
   const leftPanelOpen = useGameStore((s) => s.leftPanelOpen);
-  const [seedInput, setSeedInput] = useState('');
-  const [systemInfo, setSystemInfo] = useState<{ starName: string; seed: number } | null>(null);
-
-  const handleRandomize = useCallback(async () => {
-    const body: { seed?: number } = {};
-    if (seedInput.trim()) {
-      const parsed = parseInt(seedInput.trim(), 10);
-      if (!isNaN(parsed)) body.seed = parsed;
-    }
-    try {
-      const res = await fetch('/api/debug/randomize-system', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      if (res.ok) {
-        const data = await res.json() as { seed: number; starName: string; planetCount: number };
-        setSystemInfo({ starName: data.starName, seed: data.seed });
-        setSeedInput('');
-      }
-    } catch {
-      // ignore network errors
-    }
-  }, [seedInput]);
 
   if (!snapshot) return null;
 
   const ship = snapshot.ships[0];
-
-  // Derive current system name from the star body in snapshot
-  const starBody = snapshot.bodies.find(b => b.type === 'star');
-  const currentSystemName = starBody?.name ?? systemInfo?.starName ?? null;
-  const currentSeed = systemInfo?.seed ?? null;
+  const systemName = snapshot.bodies.find(b => b.type === 'star')?.name;
 
   return (
     <div className="hud">
       {/* Left panel (collapsible) */}
       <LeftPanel />
 
-      {/* Top-left: Time controls */}
-      <div className={`hud-panel hud-top-left${leftPanelOpen ? ' panel-open' : ''}`}>
-        <div className="hud-label">GAME TIME</div>
-        <div className="hud-value">{formatGameTime(snapshot.gameTime)}</div>
-      </div>
+      {/* Top-left: Time (hidden when left panel is open — shown in TabBar instead) */}
+      {!leftPanelOpen && (
+        <div className="hud-panel hud-top-left">
+          <div className="hud-label">GAME TIME</div>
+          <div className="hud-value">{formatGameTime(snapshot.gameTime)}</div>
+          {systemName && (
+            <>
+              <div className="hud-label">SYSTEM</div>
+              <div className="hud-value">{systemName}</div>
+            </>
+          )}
+        </div>
+      )}
 
       {/* Top-right: Mode / Velocity / Destination / ETA */}
       {ship && (
@@ -90,8 +70,8 @@ export function HudOverlay() {
         </div>
       )}
 
-      {/* Bottom-left: Fuel */}
-      {ship && (
+      {/* Bottom-left: Fuel (hidden when panel open — available in SYS) */}
+      {ship && !leftPanelOpen && (
         <div className="hud-panel hud-bottom-left">
           <div className="hud-row">
             <span className="hud-label">FUEL</span>
@@ -109,32 +89,8 @@ export function HudOverlay() {
         </div>
       )}
 
-      {/* Bottom-right: System info / Randomize */}
-      <div className="hud-panel hud-bottom-right">
-        {currentSystemName && (
-          <div className="hud-row">
-            <span className="hud-label">SYSTEM</span>
-            <span className="hud-value">{currentSystemName}</span>
-          </div>
-        )}
-        {currentSeed != null && (
-          <div className="hud-row">
-            <span className="hud-label">SEED</span>
-            <span className="hud-value hud-dim">{currentSeed}</span>
-          </div>
-        )}
-        <div className="hud-row" style={{ gap: '4px', marginTop: '4px' }}>
-          <input
-            className="hud-seed-input"
-            type="text"
-            placeholder="seed"
-            value={seedInput}
-            onChange={(e) => setSeedInput(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') handleRandomize(); }}
-          />
-          <button className="hud-btn" onClick={handleRandomize}>RANDOMIZE</button>
-        </div>
-      </div>
+      {/* Right debug panel */}
+      <DebugPanel />
 
       {/* Detail modal */}
       <DetailModal />

@@ -9,6 +9,7 @@ export interface ISimulationBridge {
   onSnapshot(cb: (s: SystemSnapshot) => void): () => void;
   connect(): Promise<void>;
   disconnect(): void;
+  getSessionToken?(): string;
   jumpGate?(targetSystemIndex: number): Promise<void>;
   getGateConnections?(): Promise<GateConnectionInfo[]>;
   currentSystemIndex?: number;

@@ -442,6 +442,53 @@ export class GameServer {
     return { ship: this.shipSnapshot(ship) };
   }
 
+  /** Debug-only: teleport a ship to any system, skipping gate/connection checks. */
+  debugJumpToSystem(shipId: string, targetSystemIndex: number): { ship?: ShipSnapshot } {
+    const ship = this.ships.find(s => s.id === shipId);
+    if (!ship) return {};
+
+    const currentIndex = this.getSystemIndexForShip(shipId);
+
+    // Generate/cache target system
+    const targetCached = this.getOrGenerateSystem(targetSystemIndex);
+    const targetGate = targetCached.bodies.find(b => b.type === 'gate');
+
+    // Place ship at target gate
+    if (targetGate) {
+      const gatePos = this.getBodyPosition(targetGate.id, targetSystemIndex);
+      ship.position = vec2Add(gatePos, vec2(ORBIT_VISUAL_RADIUS, 0));
+      ship.orbitBodyId = targetGate.id;
+    } else {
+      ship.position = vec2(2 * 1.496e11, 0);
+      ship.orbitBodyId = null;
+    }
+    ship.mode = 'orbit';
+    ship.velocity = Vec2Zero;
+    ship.route = null;
+    ship.orbitAngle = 0;
+
+    // Broadcast PLAYER_LEFT to old system
+    this.broadcastToSystem(currentIndex, EVENT_PLAYER_LEFT, { shipId });
+
+    // Update system tracking
+    this.playerSystems.set(shipId, targetSystemIndex);
+
+    // Send SYSTEM_CHANGED to jumping player only
+    this.sendToPlayer(shipId, 'SYSTEM_CHANGED', {
+      seed: getSystemSeed(this.worldSeed, targetSystemIndex),
+      systemIndex: targetSystemIndex,
+      snapshot: this.snapshotForSystem(targetSystemIndex),
+    });
+
+    // Broadcast PLAYER_JOINED to new system
+    this.broadcastToSystem(targetSystemIndex, EVENT_PLAYER_JOINED, {
+      shipId,
+      ship: this.shipSnapshot(ship),
+    });
+
+    return { ship: this.shipSnapshot(ship) };
+  }
+
   // ── Tick loop ────────────────────────────────────────────────────
 
   private tick(): void {
@@ -499,11 +546,11 @@ export class GameServer {
       }
     }
 
-    // Subsystem updates at ~2Hz (every 10 ticks at 20Hz)
+    // Subsystem updates at ~1Hz (every 20 ticks at 20Hz)
     this.subsystemTickCounter++;
-    if (this.subsystemTickCounter >= 10) {
+    if (this.subsystemTickCounter >= 20) {
       this.subsystemTickCounter = 0;
-      this.tickSubsystems(gameDt * 10);
+      this.tickSubsystems(gameDt * 20);
     }
   }
 

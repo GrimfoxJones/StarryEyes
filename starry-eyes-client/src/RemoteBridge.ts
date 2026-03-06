@@ -119,7 +119,22 @@ export class RemoteBridge implements ISimulationBridge {
     // 3. Open WebSocket
     await this.openWebSocket();
 
-    // 4. Start heartbeat sync
+    // 4. Push debug state to store
+    const store = useGameStore.getState();
+    store.setCurrentSystemIndex(this.currentSystemIndex);
+    try {
+      const debugRes = await fetch(`${this.serverUrl}/api/debug/info`);
+      if (debugRes.ok) {
+        const debugData = await debugRes.json() as { worldSeed: number };
+        store.setWorldSeed(debugData.worldSeed);
+      }
+    } catch { /* ignore */ }
+    try {
+      const connections = await this.getGateConnections();
+      store.setConnectedSystems(connections);
+    } catch { /* ignore */ }
+
+    // 5. Start heartbeat sync
     this.startHeartbeat();
   }
 
@@ -435,6 +450,15 @@ export class RemoteBridge implements ISimulationBridge {
       case 'SYSTEM_CHANGED': {
         const data = msg.data as { seed: number; systemIndex?: number; snapshot: SystemSnapshot };
         if (data.systemIndex != null) this.currentSystemIndex = data.systemIndex;
+        // Update debug store
+        {
+          const debugStore = useGameStore.getState();
+          debugStore.setWorldSeed(data.seed);
+          debugStore.setCurrentSystemIndex(this.currentSystemIndex);
+          this.getGateConnections().then(conns => {
+            useGameStore.getState().setConnectedSystems(conns);
+          });
+        }
         // Refresh body definitions from the new snapshot
         this.bodies = data.snapshot.bodies.map(b => ({
           id: b.id,

@@ -49,6 +49,10 @@ interface GameState {
   closeLeftPanel: () => void;
   setActiveTab: (tab: PrimaryTab) => void;
   setActiveSubTab: (subTab: string) => void;
+  sysDrillNodeId: string | null;
+  setSysDrillNodeId: (nodeId: string | null) => void;
+  hoveredSubTab: string | null;
+  setHoveredSubTab: (subTab: string | null) => void;
 
   // Popups
   popup: PopupState | null;
@@ -71,6 +75,16 @@ interface GameState {
   showGateDialog: (gateBodyId: string, connections: GateConnectionInfo[]) => void;
   dismissGateDialog: () => void;
 
+  // Debug panel
+  debugPanelOpen: boolean;
+  toggleDebugPanel: () => void;
+  worldSeed: number | null;
+  setWorldSeed: (seed: number) => void;
+  currentSystemIndex: number;
+  setCurrentSystemIndex: (index: number) => void;
+  connectedSystems: GateConnectionInfo[];
+  setConnectedSystems: (systems: GateConnectionInfo[]) => void;
+
   // Subsystem state
   subsystemSnapshot: SubsystemSnapshot | null;
   prevSubsystemSnapshot: SubsystemSnapshot | null;
@@ -89,14 +103,18 @@ export const useGameStore = create<GameState>((set) => ({
 
   // Left panel
   leftPanelOpen: false,
-  activeTab: 'SYS',
+  activeTab: 'OPS',
   activeSubTab: 'OVERVIEW',
   isDocked: false,
   toggleLeftPanel: () => set((s) => ({ leftPanelOpen: !s.leftPanelOpen })),
   openLeftPanel: () => set({ leftPanelOpen: true }),
   closeLeftPanel: () => set({ leftPanelOpen: false }),
-  setActiveTab: (tab) => set({ activeTab: tab, activeSubTab: TAB_DEFAULTS[tab] }),
-  setActiveSubTab: (subTab) => set({ activeSubTab: subTab }),
+  setActiveTab: (tab) => set({ activeTab: tab, activeSubTab: TAB_DEFAULTS[tab], sysDrillNodeId: null }),
+  setActiveSubTab: (subTab) => set({ activeSubTab: subTab, sysDrillNodeId: null }),
+  sysDrillNodeId: null,
+  setSysDrillNodeId: (nodeId) => set({ sysDrillNodeId: nodeId }),
+  hoveredSubTab: null,
+  setHoveredSubTab: (subTab) => set({ hoveredSubTab: subTab }),
 
   // Popups
   popup: null,
@@ -118,6 +136,16 @@ export const useGameStore = create<GameState>((set) => ({
   gateDialog: null,
   showGateDialog: (gateBodyId, connections) => set({ gateDialog: { gateBodyId, connections } }),
   dismissGateDialog: () => set({ gateDialog: null }),
+
+  // Debug panel
+  debugPanelOpen: false,
+  toggleDebugPanel: () => set((s) => ({ debugPanelOpen: !s.debugPanelOpen })),
+  worldSeed: null,
+  setWorldSeed: (seed) => set({ worldSeed: seed }),
+  currentSystemIndex: 0,
+  setCurrentSystemIndex: (index) => set({ currentSystemIndex: index }),
+  connectedSystems: [],
+  setConnectedSystems: (systems) => set({ connectedSystems: systems }),
 
   // Subsystem state
   subsystemSnapshot: null,

@@ -1,0 +1,235 @@
+.debug-panel-container {
+  position: absolute;
+  top: 0;
+  right: 0;
+  height: 100%;
+  z-index: var(--z-left-panel);
+  pointer-events: none;
+}
+
+.debug-panel {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 280px;
+  height: 100%;
+  background: var(--bg-deep);
+  border-left: 1px solid var(--border-subtle);
+  transform: translateX(100%);
+  transition: transform var(--transition-speed) ease;
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  font-family: var(--font-mono);
+  padding: 14px;
+  box-sizing: border-box;
+  overflow-y: auto;
+}
+
+.debug-panel.open {
+  transform: translateX(0);
+}
+
+.debug-panel-toggle {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  transform: translateY(-50%);
+  width: 20px;
+  height: 60px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-subtle);
+  border-right: none;
+  border-radius: 4px 0 0 4px;
+  cursor: pointer;
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-label);
+  font-size: 12px;
+  transition: right var(--transition-speed) ease, background 0.15s;
+}
+
+.debug-panel-toggle:hover {
+  background: var(--bg-hover);
+  color: var(--accent-cyan);
+}
+
+.debug-panel-toggle.open {
+  right: 280px;
+}
+
+.debug-panel-title {
+  font-size: var(--font-size-md);
+  color: var(--accent-cyan);
+  letter-spacing: 2px;
+  margin-bottom: 12px;
+}
+
+.debug-section {
+  margin-bottom: 14px;
+}
+
+.debug-section-label {
+  font-size: var(--font-size-xs);
+  color: var(--text-label);
+  letter-spacing: 1px;
+  margin-bottom: 6px;
+  border-bottom: 1px solid var(--border-subtle);
+  padding-bottom: 4px;
+}
+
+.debug-seed-row {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.debug-seed-input {
+  flex: 1;
+  background: rgba(15, 25, 50, 0.6);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
+  padding: 4px 6px;
+  border-radius: 2px;
+  outline: none;
+}
+
+.debug-seed-input:focus {
+  border-color: var(--accent-cyan);
+}
+
+.debug-btn {
+  background: rgba(0, 200, 255, 0.1);
+  border: 1px solid var(--accent-cyan-dim);
+  color: var(--accent-cyan);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
+  padding: 4px 8px;
+  border-radius: 2px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.debug-btn:hover {
+  background: rgba(0, 200, 255, 0.2);
+}
+
+.debug-info-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: var(--font-size-sm);
+  margin-bottom: 2px;
+}
+
+.debug-info-label {
+  color: var(--text-label);
+}
+
+.debug-info-value {
+  color: var(--text-primary);
+}
+
+.debug-connection-wrapper {
+  margin-bottom: 2px;
+}
+
+.debug-connection {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--font-size-sm);
+  padding: 3px 4px;
+  border-radius: 2px;
+  cursor: pointer;
+  color: var(--text-primary);
+  transition: background 0.15s;
+}
+
+.debug-connection:hover {
+  background: var(--bg-hover);
+  color: var(--accent-cyan);
+}
+
+.debug-connection.expanded {
+  color: var(--accent-cyan);
+  background: var(--bg-hover);
+}
+
+.debug-connection-arrow {
+  width: 10px;
+  flex-shrink: 0;
+}
+
+.debug-connection-idx {
+  color: var(--text-label);
+  font-size: var(--font-size-xs);
+  margin-left: auto;
+}
+
+.debug-system-detail {
+  margin-left: 16px;
+  padding: 6px 0 6px 8px;
+  border-left: 1px solid var(--border-subtle);
+}
+
+.debug-detail-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: var(--font-size-xs);
+  margin-bottom: 3px;
+}
+
+.debug-detail-label {
+  color: var(--text-label);
+  letter-spacing: 0.5px;
+}
+
+.debug-detail-value {
+  color: var(--text-primary);
+}
+
+.debug-planet-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: var(--font-size-xs);
+  padding: 1px 0;
+  color: var(--text-bright);
+}
+
+.debug-planet-name {
+  min-width: 0;
+}
+
+.debug-planet-row.habitable {
+  color: var(--status-nominal);
+}
+
+.debug-planet-row.habitable .debug-planet-class {
+  color: var(--status-nominal);
+  opacity: 0.7;
+}
+
+.debug-planet-class {
+  color: var(--text-label);
+  margin-left: auto;
+}
+
+.debug-planet-moons {
+  color: var(--text-hint);
+  flex-shrink: 0;
+}
+
+.debug-quick-travel {
+  width: 100%;
+  margin-top: 6px;
+  padding: 5px 8px;
+  text-align: center;
+  letter-spacing: 1px;
+}
