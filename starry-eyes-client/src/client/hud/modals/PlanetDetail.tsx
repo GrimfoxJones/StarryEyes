@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { ObjectType } from '../store.ts';
+import { useGameStore } from '../store.ts';
 import {
   formatMassEarth,
   formatRadiusKm,
@@ -23,13 +24,18 @@ export function PlanetDetail({ objectId, objectType }: PlanetDetailProps) {
   const [detail, setDetail] = useState<DetailResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const bridge = useGameStore((s) => s.bridge);
 
   useEffect(() => {
     setLoading(true);
     setError(null);
     setDetail(null);
 
-    fetch(`/api/bodies/${encodeURIComponent(objectId)}/detail`)
+    const headers: Record<string, string> = {};
+    const token = bridge?.getSessionToken?.();
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    fetch(`/api/bodies/${encodeURIComponent(objectId)}/detail`, { headers })
       .then(res => {
         if (!res.ok) throw new Error(res.status === 404 ? 'No detail available' : `HTTP ${res.status}`);
         return res.json();
