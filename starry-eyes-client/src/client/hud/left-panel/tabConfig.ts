@@ -23,7 +23,7 @@ export const TABS: TabDef[] = [
       { id: 'REACTOR', label: 'REACTOR', description: 'Reactor output & fuel consumption' },
       { id: 'THERMAL', label: 'THERMAL', description: 'Heat management & radiators' },
       { id: 'SENSORS', label: 'SENSORS', description: 'Sensor array & contact tracking' },
-      { id: 'PROPELLANT', label: 'PROPEL.', description: 'Propellant tanks & reserves' },
+      { id: 'PROPELLANT', label: 'FUEL', description: 'Fuel tanks & reserves' },
       { id: 'CARGO', label: 'CARGO', description: 'Cargo hold manifest & capacity' },
       { id: 'COMMS', label: 'COMMS', description: 'Communications & transponder' },
       { id: 'STRUCTURAL', label: 'STRUCT.', description: 'Hull integrity & damage control' },

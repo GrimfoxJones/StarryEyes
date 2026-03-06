@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { SystemSnapshot, Destination } from '@starryeyes/shared';
+import type { SystemSnapshot, Destination, SubsystemSnapshot } from '@starryeyes/shared';
 import type { GateConnectionInfo } from '@starryeyes/shared';
 import type { ISimulationBridge } from '../../bridge.ts';
 import { TAB_DEFAULTS } from './left-panel/tabConfig.ts';
@@ -70,6 +70,12 @@ interface GameState {
   gateDialog: GateDialogState | null;
   showGateDialog: (gateBodyId: string, connections: GateConnectionInfo[]) => void;
   dismissGateDialog: () => void;
+
+  // Subsystem state
+  subsystemSnapshot: SubsystemSnapshot | null;
+  prevSubsystemSnapshot: SubsystemSnapshot | null;
+  subsystemReceiveTime: number;
+  updateSubsystems: (snapshot: SubsystemSnapshot) => void;
 }
 
 export const useGameStore = create<GameState>((set) => ({
@@ -112,4 +118,14 @@ export const useGameStore = create<GameState>((set) => ({
   gateDialog: null,
   showGateDialog: (gateBodyId, connections) => set({ gateDialog: { gateBodyId, connections } }),
   dismissGateDialog: () => set({ gateDialog: null }),
+
+  // Subsystem state
+  subsystemSnapshot: null,
+  prevSubsystemSnapshot: null,
+  subsystemReceiveTime: 0,
+  updateSubsystems: (snapshot) => set((s) => ({
+    prevSubsystemSnapshot: s.subsystemSnapshot,
+    subsystemSnapshot: snapshot,
+    subsystemReceiveTime: performance.now(),
+  })),
 }));

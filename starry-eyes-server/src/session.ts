@@ -7,6 +7,7 @@ export interface Session {
   playerName: string;
   shipId: string;
   ws: WebSocket | null;
+  subsystemsSubscribed: boolean;
 }
 
 export class SessionStore {
@@ -16,7 +17,7 @@ export class SessionStore {
     const token = uuidv4();
     const playerId = uuidv4();
     const shipId = `ship_${playerId.slice(0, 8)}`;
-    const session: Session = { token, playerId, playerName, shipId, ws: null };
+    const session: Session = { token, playerId, playerName, shipId, ws: null, subsystemsSubscribed: false };
     this.sessions.set(token, session);
     return session;
   }

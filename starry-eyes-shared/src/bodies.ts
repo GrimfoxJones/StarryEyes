@@ -1,12 +1,10 @@
 import type { CelestialBody, ShipState, Vec2 } from './types.js';
+import { DARTER_MASS } from './ships/darter.js';
 import { vec2, vec2Add, Vec2Zero } from './types.js';
 import { keplerPositionAtTime } from './kepler.js';
 import {
   STAR_MU,
   STAR_MASS,
-  SHIP_MAX_ACCELERATION,
-  SHIP_FUEL_CAPACITY,
-  SHIP_FUEL_CONSUMPTION_RATE,
   ORBIT_VISUAL_RADIUS,
   G,
 } from './constants.js';
@@ -151,9 +149,9 @@ export function createPlayerShip(bodies: readonly CelestialBody[], gameTime: num
     id: shipId,
     position: vec2Add(tellusPos, vec2(ORBIT_VISUAL_RADIUS, 0)),
     velocity: Vec2Zero,
-    maxAcceleration: SHIP_MAX_ACCELERATION,
-    fuel: SHIP_FUEL_CAPACITY,
-    fuelConsumptionRate: SHIP_FUEL_CONSUMPTION_RATE,
+    maxAcceleration: DARTER_MASS.maxAcceleration,
+    fuel: DARTER_MASS.maxPropellant,
+    fuelConsumptionRate: DARTER_MASS.fuelConsumptionRate,
     mode: 'orbit',
     route: null,
     orbitBodyId: 'tellus',

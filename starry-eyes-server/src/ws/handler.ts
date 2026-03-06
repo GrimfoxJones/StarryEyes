@@ -66,9 +66,29 @@ export function setupWebSocket(
       data: game.snapshotForSystem(sysIndex),
     }));
 
+    ws.on('message', (data) => {
+      try {
+        const msg = JSON.parse(data.toString()) as { type: string; data?: unknown };
+        switch (msg.type) {
+          case 'SUBSCRIBE_SUBSYSTEMS':
+            sess.subsystemsSubscribed = true;
+            break;
+          case 'UNSUBSCRIBE_SUBSYSTEMS':
+            sess.subsystemsSubscribed = false;
+            break;
+          case 'SUBSYSTEM_COMMAND':
+            game.handleSubsystemCommand(sess.shipId, msg.data);
+            break;
+        }
+      } catch {
+        // Ignore malformed messages
+      }
+    });
+
     ws.on('close', () => {
       console.log(`WebSocket disconnected: ${sess.playerName}`);
       sess.ws = null;
+      sess.subsystemsSubscribed = false;
 
       const currentSysIndex = game.playerSystems.get(sess.shipId) ?? 0;
       game.broadcastToSystem(currentSysIndex, EVENT_PLAYER_LEFT, {

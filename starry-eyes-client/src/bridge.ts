@@ -1,4 +1,4 @@
-import type { PlayerCommand, SystemSnapshot } from '@starryeyes/shared';
+import type { PlayerCommand, SystemSnapshot, SubsystemCommand } from '@starryeyes/shared';
 import type { GateConnectionInfo } from '@starryeyes/shared';
 
 /** Interface that decouples client from simulation. */
@@ -12,4 +12,7 @@ export interface ISimulationBridge {
   jumpGate?(targetSystemIndex: number): Promise<void>;
   getGateConnections?(): Promise<GateConnectionInfo[]>;
   currentSystemIndex?: number;
+  subscribeSubsystems?(): void;
+  unsubscribeSubsystems?(): void;
+  sendSubsystemCommand?(cmd: SubsystemCommand): void;
 }

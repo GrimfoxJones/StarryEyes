@@ -1,0 +1,211 @@
+/* ── Subsystem Panel Styles ────────────────────────────────────────── */
+
+.subsystem-panel {
+  padding: 12px 8px;
+}
+
+.subsystem-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding: 0 4px;
+}
+
+.subsystem-header__name {
+  color: var(--text-bright);
+  font-size: var(--font-size-md);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.subsystem-header__status {
+  font-size: var(--font-size-sm);
+  letter-spacing: 0.5px;
+}
+
+/* ── Value Row ────────────────────────────────────────────────────── */
+
+.value-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  min-height: 24px;
+}
+
+.value-row__label {
+  color: var(--text-label);
+  font-size: var(--font-size-sm);
+  letter-spacing: 0.5px;
+  min-width: 110px;
+  text-transform: uppercase;
+}
+
+.value-row__value {
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-md);
+  flex: 1;
+  text-align: right;
+}
+
+.value-row__unit {
+  color: var(--text-label);
+  font-size: var(--font-size-xs);
+  min-width: 30px;
+}
+
+.value-row--warn .value-row__value {
+  color: var(--status-warning);
+}
+
+.value-row--critical .value-row__value {
+  color: var(--status-danger);
+}
+
+/* ── Gauge / Bar ──────────────────────────────────────────────────── */
+
+.gauge-container {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.gauge-bar {
+  flex: 1;
+  height: 6px;
+  background: var(--bar-bg);
+  border-radius: 3px;
+  overflow: hidden;
+  position: relative;
+}
+
+.gauge-bar__fill {
+  height: 100%;
+  border-radius: 3px;
+  background: var(--accent-cyan);
+}
+
+.gauge-bar__fill--warn {
+  background: var(--status-warning);
+}
+
+.gauge-bar__fill--critical {
+  background: var(--status-danger);
+}
+
+.gauge-bar__text {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
+  color: var(--text-primary);
+  min-width: 50px;
+  text-align: right;
+}
+
+/* ── Toggle ───────────────────────────────────────────────────────── */
+
+.toggle-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.toggle-indicator {
+  width: 28px;
+  height: 14px;
+  border-radius: 7px;
+  background: var(--bar-bg);
+  position: relative;
+  transition: background 0.2s;
+}
+
+.toggle-indicator--on {
+  background: var(--accent-cyan-dim);
+}
+
+.toggle-indicator__dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--status-offline);
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  transition: left 0.2s, background 0.2s;
+}
+
+.toggle-indicator--on .toggle-indicator__dot {
+  left: 16px;
+  background: var(--accent-cyan);
+}
+
+.toggle-label {
+  font-size: var(--font-size-sm);
+  color: var(--text-primary);
+}
+
+/* ── Slider ───────────────────────────────────────────────────────── */
+
+.slider-input {
+  flex: 1;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  background: var(--bar-bg);
+  border-radius: 2px;
+  outline: none;
+}
+
+.slider-input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--accent-cyan);
+  cursor: pointer;
+}
+
+/* ── Child Link ───────────────────────────────────────────────────── */
+
+.child-link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  cursor: pointer;
+  border-radius: 3px;
+  margin-top: 4px;
+  color: var(--text-primary);
+  font-size: var(--font-size-sm);
+  letter-spacing: 0.5px;
+}
+
+.child-link:hover {
+  background: var(--bg-hover);
+}
+
+.child-link__chevron {
+  color: var(--text-label);
+  margin-left: auto;
+}
+
+/* ── Section Divider ──────────────────────────────────────────────── */
+
+.subsystem-divider {
+  height: 1px;
+  background: var(--border-subtle);
+  margin: 8px 4px;
+}
+
+/* ── Connecting placeholder ───────────────────────────────────────── */
+
+.subsystem-connecting {
+  padding: 24px 8px;
+  text-align: center;
+  color: var(--text-label);
+  font-size: var(--font-size-sm);
+  letter-spacing: 1px;
+}

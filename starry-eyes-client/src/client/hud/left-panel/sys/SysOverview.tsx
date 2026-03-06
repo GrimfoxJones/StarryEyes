@@ -1,20 +1,68 @@
+import type { SubsystemNode, SubsystemStatus } from '@starryeyes/shared';
 import { useGameStore } from '../../store.ts';
 import { StatusDot } from '../StatusDot.tsx';
 
-interface Subsystem {
+interface SubsystemRow {
   id: string;
   label: string;
   status: 'nominal' | 'warning' | 'danger' | 'offline';
   value: string;
 }
 
-const SUBSYSTEMS: Subsystem[] = [
+const STATUS_MAP: Record<SubsystemStatus, 'nominal' | 'warning' | 'danger' | 'offline'> = {
+  NOMINAL: 'nominal',
+  WARNING: 'warning',
+  CRITICAL: 'danger',
+  OFFLINE: 'offline',
+  STARTING: 'warning',
+  SHUTDOWN: 'offline',
+};
+
+const SUB_TAB_LABELS: Record<string, string> = {
+  navigation: 'NAV',
+  drive: 'DRIVE',
+  reactor: 'REACTOR',
+  thermal: 'THERMAL',
+  sensors: 'SENSORS',
+  propellant: 'FUEL',
+  cargo: 'CARGO',
+  comms: 'COMMS',
+  structural: 'STRUCT.',
+};
+
+const SUB_TAB_IDS: Record<string, string> = {
+  navigation: 'NAV',
+  drive: 'DRIVE',
+  reactor: 'REACTOR',
+  thermal: 'THERMAL',
+  sensors: 'SENSORS',
+  propellant: 'PROPELLANT',
+  cargo: 'CARGO',
+  comms: 'COMMS',
+  structural: 'STRUCTURAL',
+};
+
+function getPrimaryValue(node: SubsystemNode): string {
+  // Show status value if it exists, otherwise first string/number value
+  const statusVal = node.values['status'];
+  if (statusVal && typeof statusVal.value === 'string') return statusVal.value;
+
+  for (const sv of Object.values(node.values)) {
+    if (typeof sv.value === 'string') return sv.value;
+    if (typeof sv.value === 'number' && sv.displayHint === 'bar' && (sv.max ?? 1) <= 1) {
+      return `${(sv.value * 100).toFixed(0)}%`;
+    }
+  }
+  return node.status;
+}
+
+const FALLBACK_SUBSYSTEMS: SubsystemRow[] = [
   { id: 'NAV', label: 'NAV', status: 'nominal', value: 'ONLINE' },
   { id: 'DRIVE', label: 'DRIVE', status: 'nominal', value: 'STANDBY' },
   { id: 'REACTOR', label: 'REACTOR', status: 'nominal', value: '100%' },
-  { id: 'THERMAL', label: 'THERMAL', status: 'nominal', value: '22°C' },
+  { id: 'THERMAL', label: 'THERMAL', status: 'nominal', value: '22\u00B0C' },
   { id: 'SENSORS', label: 'SENSORS', status: 'nominal', value: 'ACTIVE' },
-  { id: 'PROPELLANT', label: 'PROPEL.', status: 'nominal', value: 'FULL' },
+  { id: 'PROPELLANT', label: 'FUEL', status: 'nominal', value: 'FULL' },
   { id: 'CARGO', label: 'CARGO', status: 'offline', value: 'EMPTY' },
   { id: 'COMMS', label: 'COMMS', status: 'nominal', value: 'ONLINE' },
   { id: 'STRUCTURAL', label: 'STRUCT.', status: 'nominal', value: '100%' },
@@ -22,6 +70,16 @@ const SUBSYSTEMS: Subsystem[] = [
 
 export function SysOverview() {
   const setActiveSubTab = useGameStore((s) => s.setActiveSubTab);
+  const snapshot = useGameStore((s) => s.subsystemSnapshot);
+
+  const rows: SubsystemRow[] = snapshot
+    ? snapshot.root.children.map((child) => ({
+        id: SUB_TAB_IDS[child.id] ?? child.id,
+        label: SUB_TAB_LABELS[child.id] ?? child.name.toUpperCase(),
+        status: STATUS_MAP[child.status] ?? 'offline',
+        value: getPrimaryValue(child),
+      }))
+    : FALLBACK_SUBSYSTEMS;
 
   return (
     <div style={{ padding: '12px 8px' }}>
@@ -34,7 +92,7 @@ export function SysOverview() {
       }}>
         SHIP SYSTEMS
       </div>
-      {SUBSYSTEMS.map((sys) => (
+      {rows.map((sys) => (
         <div
           key={sys.id}
           onClick={() => setActiveSubTab(sys.id)}

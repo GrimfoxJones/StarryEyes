@@ -6,6 +6,8 @@ import type {
   StarInfo,
   CelestialBody,
   Vec2,
+  SubsystemCommand,
+  SubsystemSnapshot,
 } from '@starryeyes/shared';
 import type { GateConnectionInfo } from '@starryeyes/shared';
 import {
@@ -183,6 +185,26 @@ export class RemoteBridge implements ISimulationBridge {
     if (!res.ok) return [];
     const data = await res.json() as { connections: GateConnectionInfo[]; systemIndex: number };
     return data.connections;
+  }
+
+  // ── Subsystem subscriptions ─────────────────────────────────────
+
+  subscribeSubsystems(): void {
+    this.wsSend({ type: 'SUBSCRIBE_SUBSYSTEMS' });
+  }
+
+  unsubscribeSubsystems(): void {
+    this.wsSend({ type: 'UNSUBSCRIBE_SUBSYSTEMS' });
+  }
+
+  sendSubsystemCommand(cmd: SubsystemCommand): void {
+    this.wsSend({ type: 'SUBSYSTEM_COMMAND', data: cmd });
+  }
+
+  private wsSend(msg: unknown): void {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify(msg));
+    }
   }
 
   // ── Local interpolation ──────────────────────────────────────────
@@ -401,6 +423,12 @@ export class RemoteBridge implements ISimulationBridge {
         const data = msg.data as { shipId: string };
         this.lastShips = this.lastShips.filter(s => s.id !== data.shipId);
         this.pushInterpolatedSnapshot();
+        break;
+      }
+
+      case 'SUBSYSTEM_UPDATE': {
+        const data = msg.data as SubsystemSnapshot;
+        useGameStore.getState().updateSubsystems(data);
         break;
       }
 

@@ -22,9 +22,6 @@ export const TRAIL_MAX_POINTS = 500;
 export const TRAIL_SAMPLE_INTERVAL = 100; // game-seconds between trail samples
 
 // ── Ship defaults ───────────────────────────────────────────────────
-export const SHIP_MAX_ACCELERATION = 9.81; // m/s² (~1g)
-export const SHIP_FUEL_CAPACITY = 100000;  // kg
-export const SHIP_FUEL_CONSUMPTION_RATE = 0.02; // kg/s at full thrust
 
 // ── Nav computer ─────────────────────────────────────────────────────
 export const ORBIT_VISUAL_RADIUS = 5e7;   // 50k km visual orbit distance

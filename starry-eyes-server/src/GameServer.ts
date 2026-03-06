@@ -6,6 +6,7 @@ import type {
   PlayerCommand,
   Vec2,
   Route,
+  SubsystemCommand,
 } from '@starryeyes/shared';
 import {
   vec2, vec2Add, vec2Length, vec2Normalize, Vec2Zero,
@@ -13,9 +14,7 @@ import {
   bodyVelocityAtTime as bodyVelocityAtTimeHelper,
   transitPositionAtTime, sampleRouteAhead,
   computeRoute, brachistochroneFuelCost,
-  SHIP_FUEL_CAPACITY,
-  SHIP_MAX_ACCELERATION,
-  SHIP_FUEL_CONSUMPTION_RATE,
+  DARTER_MASS,
   ORBIT_VISUAL_RADIUS,
   ORBIT_VISUAL_SPEED,
   generateSystem, systemToBodies, findStartingBody,
@@ -24,6 +23,8 @@ import {
 } from '@starryeyes/shared';
 import type { GeneratedSystem, GateConnectionInfo } from '@starryeyes/shared';
 import { TICK_RATE_MS } from './config.js';
+import { SubsystemSimulator } from './subsystems/SubsystemSimulator.js';
+import { EVENT_SUBSYSTEM_UPDATE } from './ws/events.js';
 import type { SessionStore } from './session.js';
 import {
   EVENT_SHIP_ROUTE_CHANGED,
@@ -52,6 +53,8 @@ export class GameServer {
   private lastTickTime = 0;
   private broadcastFn: (message: string) => void;
   private sessions: SessionStore;
+  private shipSubsystems = new Map<string, SubsystemSimulator>();
+  private subsystemTickCounter = 0;
 
   constructor(sessions: SessionStore, broadcastFn: (message: string) => void) {
     this.broadcastFn = broadcastFn;
@@ -113,6 +116,7 @@ export class GameServer {
     const startBodyId = findStartingBody(cached.system);
     const ship = this.createShipAtBody(shipId, startBodyId, systemIndex);
     this.ships.push(ship);
+    this.shipSubsystems.set(shipId, new SubsystemSimulator());
     return ship;
   }
 
@@ -135,9 +139,9 @@ export class GameServer {
       id: shipId,
       position,
       velocity: Vec2Zero,
-      maxAcceleration: SHIP_MAX_ACCELERATION,
-      fuel: SHIP_FUEL_CAPACITY,
-      fuelConsumptionRate: SHIP_FUEL_CONSUMPTION_RATE,
+      maxAcceleration: DARTER_MASS.maxAcceleration,
+      fuel: DARTER_MASS.maxPropellant,
+      fuelConsumptionRate: DARTER_MASS.fuelConsumptionRate,
       mode,
       route: null,
       orbitBodyId,
@@ -148,6 +152,7 @@ export class GameServer {
   removeShip(shipId: string): void {
     this.ships = this.ships.filter(s => s.id !== shipId);
     this.playerSystems.delete(shipId);
+    this.shipSubsystems.delete(shipId);
   }
 
   // ── Body position helpers ────────────────────────────────────────
@@ -248,7 +253,7 @@ export class GameServer {
       }
       ship.velocity = Vec2Zero;
       ship.route = null;
-      ship.fuel = SHIP_FUEL_CAPACITY;
+      ship.fuel = DARTER_MASS.maxPropellant;
     }
 
     // Broadcast full refresh to all
@@ -493,6 +498,42 @@ export class GameServer {
         }
       }
     }
+
+    // Subsystem updates at ~2Hz (every 10 ticks at 20Hz)
+    this.subsystemTickCounter++;
+    if (this.subsystemTickCounter >= 10) {
+      this.subsystemTickCounter = 0;
+      this.tickSubsystems(gameDt * 10);
+    }
+  }
+
+  private tickSubsystems(gameDt: number): void {
+    for (const session of this.sessions.allConnected()) {
+      if (!session.subsystemsSubscribed) continue;
+      const sim = this.shipSubsystems.get(session.shipId);
+      const ship = this.ships.find(s => s.id === session.shipId);
+      if (!sim || !ship) continue;
+
+      const sysIndex = this.getSystemIndexForShip(session.shipId);
+      const bodies = this.getBodiesForSystem(sysIndex);
+      const bodyName = (id: string) => bodies.find(b => b.id === id)?.name ?? id;
+      sim.tick(gameDt, ship, this.gameTime, bodyName);
+      const snapshot = sim.snapshot(this.gameTime);
+
+      if (session.ws && session.ws.readyState === 1) {
+        session.ws.send(JSON.stringify({
+          type: EVENT_SUBSYSTEM_UPDATE,
+          gameTime: this.gameTime,
+          data: snapshot,
+        }));
+      }
+    }
+  }
+
+  handleSubsystemCommand(shipId: string, data: unknown): void {
+    const sim = this.shipSubsystems.get(shipId);
+    if (!sim || !data) return;
+    sim.applyCommand(data as SubsystemCommand);
   }
 
   // ── Snapshots ────────────────────────────────────────────────────
@@ -536,7 +577,7 @@ export class GameServer {
       heading,
       mode: ship.mode,
       fuel: ship.fuel,
-      maxFuel: SHIP_FUEL_CAPACITY,
+      maxFuel: DARTER_MASS.maxPropellant,
       fuelConsumptionRate: ship.fuelConsumptionRate,
       speed: vec2Length(ship.velocity),
       destinationName,
