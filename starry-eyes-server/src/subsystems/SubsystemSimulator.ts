@@ -308,15 +308,27 @@ export class SubsystemSimulator {
 
     // ── Propellant (read from ship state) ────────────────────
     const propellant = findNode(this.tree, 'propellant')!;
-    const tankMain = findNode(this.tree, 'propellant.tank_main')!;
+    const tank1 = findNode(this.tree, 'propellant.tank_1')!;
+    const tank2 = findNode(this.tree, 'propellant.tank_2')!;
     const fuelFraction = ship.fuel / DARTER_MASS.maxPropellant;
 
     setValue(propellant, 'total_remaining', Math.round(ship.fuel * 10) / 10);
     setValue(propellant, 'mass_fraction', Math.round((ship.fuel / totalMass) * 1000) / 1000);
     propellant.status = fuelFraction < 0.05 ? 'CRITICAL' : fuelFraction < 0.2 ? 'WARNING' : 'NOMINAL';
 
-    setValue(tankMain, 'level', Math.round(ship.fuel * 10) / 10);
-    setValue(tankMain, 'pressure', Math.round(35 * fuelFraction * 10) / 10);
+    // Split fuel evenly across both tanks
+    const perTank = ship.fuel / 2;
+    const tankCapacity = 4000;
+    const tankFraction = Math.round((perTank / tankCapacity) * 1000) / 1000;
+    const tankPressure = Math.round(35 * (perTank / tankCapacity) * 10) / 10;
+
+    setValue(tank1, 'level', Math.round(perTank * 10) / 10);
+    setValue(tank1, 'mass_fraction', tankFraction);
+    setValue(tank1, 'pressure', tankPressure);
+
+    setValue(tank2, 'level', Math.round(perTank * 10) / 10);
+    setValue(tank2, 'mass_fraction', tankFraction);
+    setValue(tank2, 'pressure', tankPressure);
 
     // ── Cargo ────────────────────────────────────────────────
     const cargo = findNode(this.tree, 'cargo')!;

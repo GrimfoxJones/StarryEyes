@@ -1,5 +1,7 @@
 import type { SubsystemNode } from '../subsystems.js';
 
+export const DARTER_SCHEMATIC_ID = 'darter-freighter';
+
 /** Darter-class Light Freighter mass configuration */
 export const DARTER_MASS = {
   hull: 14000,
@@ -259,13 +261,28 @@ export const DARTER_DEFINITION: SubsystemNode = {
       },
       children: [
         {
-          id: 'propellant.tank_main',
-          name: 'Main Tank',
+          id: 'propellant.tank_1',
+          name: 'Main Tank 1',
           category: 'propellant',
           status: 'NOMINAL',
           values: {
-            capacity: { value: 8000, unit: 'kg', precision: 0, control: 'simulated', displayHint: 'number', interpolation: 'snap' },
-            level: { value: 8000, unit: 'kg', precision: 1, min: 0, max: 8000, control: 'simulated', displayHint: 'bar', interpolation: 'snap' },
+            capacity: { value: 4000, unit: 'kg', precision: 0, control: 'simulated', displayHint: 'number', interpolation: 'snap' },
+            level: { value: 4000, unit: 'kg', precision: 1, min: 0, max: 4000, control: 'simulated', displayHint: 'bar', interpolation: 'snap' },
+            mass_fraction: { value: 1.0, min: 0, max: 1, precision: 3, control: 'simulated', displayHint: 'bar', interpolation: 'snap' },
+            type: { value: 'hydrogen', control: 'simulated', displayHint: 'enum' },
+            pressure: { value: 35, unit: 'MPa', precision: 1, control: 'simulated', displayHint: 'number' },
+          },
+          children: [],
+        },
+        {
+          id: 'propellant.tank_2',
+          name: 'Main Tank 2',
+          category: 'propellant',
+          status: 'NOMINAL',
+          values: {
+            capacity: { value: 4000, unit: 'kg', precision: 0, control: 'simulated', displayHint: 'number', interpolation: 'snap' },
+            level: { value: 4000, unit: 'kg', precision: 1, min: 0, max: 4000, control: 'simulated', displayHint: 'bar', interpolation: 'snap' },
+            mass_fraction: { value: 1.0, min: 0, max: 1, precision: 3, control: 'simulated', displayHint: 'bar', interpolation: 'snap' },
             type: { value: 'hydrogen', control: 'simulated', displayHint: 'enum' },
             pressure: { value: 35, unit: 'MPa', precision: 1, control: 'simulated', displayHint: 'number' },
           },
