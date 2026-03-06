@@ -12,6 +12,31 @@ importers:
         specifier: ^9.1.0
         version: 9.2.1
 
+  schematic-viewer:
+    dependencies:
+      react:
+        specifier: ^19.2.0
+        version: 19.2.4
+      react-dom:
+        specifier: ^19.2.0
+        version: 19.2.4(react@19.2.4)
+    devDependencies:
+      '@types/react':
+        specifier: ^19.2.7
+        version: 19.2.14
+      '@types/react-dom':
+        specifier: ^19.2.3
+        version: 19.2.3(@types/react@19.2.14)
+      '@vitejs/plugin-react':
+        specifier: ^5.1.1
+        version: 5.1.4(vite@7.3.1(@types/node@24.11.0)(tsx@4.21.0))
+      typescript:
+        specifier: ~5.9.3
+        version: 5.9.3
+      vite:
+        specifier: ^7.3.1
+        version: 7.3.1(@types/node@24.11.0)(tsx@4.21.0)
+
   starry-eyes-client:
     dependencies:
       '@starryeyes/shared':

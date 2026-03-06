@@ -2,6 +2,7 @@ packages:
   - starry-eyes-shared
   - starry-eyes-client
   - starry-eyes-server
+  - schematic-viewer
 
 ignoredBuiltDependencies:
   - esbuild
