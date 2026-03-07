@@ -16,4 +16,8 @@ export interface ISimulationBridge {
   subscribeSubsystems?(): void;
   unsubscribeSubsystems?(): void;
   sendSubsystemCommand?(cmd: SubsystemCommand): void;
+  subscribeMarket?(stationId: string): void;
+  unsubscribeMarket?(): void;
+  executeTrade?(stationId: string, commodityId: string, quantity: number, isBuy: boolean): Promise<{ success: boolean; error?: string }>;
+  fetchCargo?(): Promise<void>;
 }

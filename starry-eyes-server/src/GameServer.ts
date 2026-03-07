@@ -7,6 +7,9 @@ import type {
   Vec2,
   Route,
   SubsystemCommand,
+  CargoManifest,
+  CommodityId,
+  TradeResult,
 } from '@starryeyes/shared';
 import {
   vec2, vec2Add, vec2Length, vec2Normalize, Vec2Zero,
@@ -20,8 +23,10 @@ import {
   generateSystem, systemToBodies, findStartingBody,
   getSystemSeed, getGateConnections, getGateConnectionInfo,
   TIME_COMPRESSION,
+  COMMODITY_DEFS,
 } from '@starryeyes/shared';
 import type { GeneratedSystem, GateConnectionInfo } from '@starryeyes/shared';
+import { EconomySimulator } from './economy/EconomySimulator.js';
 import { TICK_RATE_MS } from './config.js';
 import { SubsystemSimulator } from './subsystems/SubsystemSimulator.js';
 import { EVENT_SUBSYSTEM_UPDATE } from './ws/events.js';
@@ -56,6 +61,15 @@ export class GameServer {
   private shipSubsystems = new Map<string, SubsystemSimulator>();
   private subsystemTickCounter = 0;
 
+  // Economy
+  private economyPerSystem = new Map<number, EconomySimulator>();
+  shipCargo = new Map<string, CargoManifest>();
+  playerCredits = new Map<string, number>();
+  playerCostBasis = new Map<string, Partial<Record<CommodityId, number>>>();
+  private static STARTING_CREDITS = 10000;
+  private economyTickAccumulator = 0;
+  private static ECONOMY_TICK_INTERVAL = 3600; // game-seconds per economy tick (1 game-hour)
+
   constructor(sessions: SessionStore, broadcastFn: (message: string) => void) {
     this.broadcastFn = broadcastFn;
     this.sessions = sessions;
@@ -83,7 +97,7 @@ export class GameServer {
     if (cached) return cached;
 
     const seed = getSystemSeed(this.worldSeed, index);
-    const system = generateSystem(seed);
+    const system = generateSystem(seed, index);
     const bodies = systemToBodies(system, this.gameTime);
     cached = { system, bodies };
     this.systemCache.set(index, cached);
@@ -92,6 +106,11 @@ export class GameServer {
     const positions = new Map<string, Vec2>();
     this.bodyPositionsPerSystem.set(index, positions);
     this.updateBodyPositionsForSystem(index);
+
+    // Initialize economy simulator for this system
+    if (!this.economyPerSystem.has(index) && Object.keys(system.stations).length > 0) {
+      this.economyPerSystem.set(index, new EconomySimulator(system.stations, system, index));
+    }
 
     return cached;
   }
@@ -108,6 +127,20 @@ export class GameServer {
     return this.playerSystems.get(shipId) ?? 0;
   }
 
+  getEconomy(systemIndex: number): EconomySimulator | undefined {
+    return this.economyPerSystem.get(systemIndex);
+  }
+
+  getCargoMass(shipId: string): number {
+    const cargo = this.shipCargo.get(shipId);
+    if (!cargo) return 0;
+    let total = 0;
+    for (const [cid, qty] of Object.entries(cargo)) {
+      total += (qty as number) * COMMODITY_DEFS[cid as CommodityId].baseMass;
+    }
+    return total;
+  }
+
   // ── Ship management ──────────────────────────────────────────────
 
   addShip(shipId: string, systemIndex = 0): ShipState {
@@ -117,6 +150,9 @@ export class GameServer {
     const ship = this.createShipAtBody(shipId, startBodyId, systemIndex);
     this.ships.push(ship);
     this.shipSubsystems.set(shipId, new SubsystemSimulator());
+    this.shipCargo.set(shipId, {});
+    this.playerCredits.set(shipId, GameServer.STARTING_CREDITS);
+    this.playerCostBasis.set(shipId, {});
     return ship;
   }
 
@@ -153,6 +189,9 @@ export class GameServer {
     this.ships = this.ships.filter(s => s.id !== shipId);
     this.playerSystems.delete(shipId);
     this.shipSubsystems.delete(shipId);
+    this.shipCargo.delete(shipId);
+    this.playerCredits.delete(shipId);
+    this.playerCostBasis.delete(shipId);
   }
 
   // ── Body position helpers ────────────────────────────────────────
@@ -229,6 +268,7 @@ export class GameServer {
     this.worldSeed = seed ?? Math.floor(Math.random() * 0xFFFFFFFF);
     this.systemCache.clear();
     this.bodyPositionsPerSystem.clear();
+    this.economyPerSystem.clear();
 
     // Reset all players to system 0
     for (const ship of this.ships) {
@@ -278,7 +318,7 @@ export class GameServer {
 
   // ── Commands ─────────────────────────────────────────────────────
 
-  processCommand(cmd: PlayerCommand): { ship?: ShipSnapshot; route?: Route | null; fuelConsumed?: number; fuelRemaining?: number } {
+  processCommand(cmd: PlayerCommand): { ship?: ShipSnapshot; route?: Route | null; fuelConsumed?: number; fuelRemaining?: number; tradeResult?: TradeResult; refuelResult?: { success: boolean; amount: number; cost: number; error?: string } } {
     switch (cmd.type) {
       case 'SET_DESTINATION': {
         const ship = this.ships.find(s => s.id === cmd.shipId);
@@ -378,7 +418,137 @@ export class GameServer {
       case 'JUMP_GATE': {
         return this.processJumpGate(cmd.shipId, cmd.targetSystemIndex);
       }
+
+      case 'BUY_COMMODITY':
+      case 'SELL_COMMODITY': {
+        return this.processTrade(cmd);
+      }
+
+      case 'REFUEL': {
+        return this.processRefuel(cmd.shipId, cmd.amount);
+      }
     }
+  }
+
+  static REFUEL_PRICE_PER_KG = 5; // credits per kg of propellant
+
+  private processRefuel(shipId: string, requestedAmount: number): { refuelResult?: { success: boolean; amount: number; cost: number; error?: string } } {
+    const ship = this.ships.find(s => s.id === shipId);
+    if (!ship) return { refuelResult: { success: false, amount: 0, cost: 0, error: 'Ship not found' } };
+
+    // Must be orbiting a station
+    if (ship.mode !== 'orbit' || !ship.orbitBodyId) {
+      return { refuelResult: { success: false, amount: 0, cost: 0, error: 'Not docked at a station' } };
+    }
+
+    const sysIndex = this.getSystemIndexForShip(shipId);
+    const cached = this.getOrGenerateSystem(sysIndex);
+    const station = cached.system.stations[ship.orbitBodyId];
+    if (!station) {
+      return { refuelResult: { success: false, amount: 0, cost: 0, error: 'No station here' } };
+    }
+
+    const maxRefuel = DARTER_MASS.maxPropellant - ship.fuel;
+    const amount = Math.min(requestedAmount, maxRefuel);
+    if (amount <= 0) {
+      return { refuelResult: { success: false, amount: 0, cost: 0, error: 'Tanks already full' } };
+    }
+
+    const cost = Math.round(amount * GameServer.REFUEL_PRICE_PER_KG);
+    const credits = this.playerCredits.get(shipId) ?? 0;
+    if (credits < cost) {
+      // Refuel as much as they can afford
+      const affordableAmount = Math.floor(credits / GameServer.REFUEL_PRICE_PER_KG);
+      if (affordableAmount <= 0) {
+        return { refuelResult: { success: false, amount: 0, cost: 0, error: 'Insufficient credits' } };
+      }
+      const actualCost = Math.round(affordableAmount * GameServer.REFUEL_PRICE_PER_KG);
+      ship.fuel += affordableAmount;
+      this.playerCredits.set(shipId, credits - actualCost);
+      return { refuelResult: { success: true, amount: affordableAmount, cost: actualCost } };
+    }
+
+    ship.fuel += amount;
+    this.playerCredits.set(shipId, credits - cost);
+    return { refuelResult: { success: true, amount, cost } };
+  }
+
+  private processTrade(cmd: PlayerCommand & { type: 'BUY_COMMODITY' | 'SELL_COMMODITY' }): { tradeResult?: TradeResult } {
+    const ship = this.ships.find(s => s.id === cmd.shipId);
+    if (!ship) return { tradeResult: { success: false, commodityId: cmd.commodityId as CommodityId, quantity: 0, unitPrice: 0, totalPrice: 0, error: 'Ship not found' } };
+
+    // Must be orbiting the station
+    if (ship.mode !== 'orbit' || ship.orbitBodyId !== cmd.stationId) {
+      return { tradeResult: { success: false, commodityId: cmd.commodityId as CommodityId, quantity: 0, unitPrice: 0, totalPrice: 0, error: 'Not docked at this station' } };
+    }
+
+    const sysIndex = this.getSystemIndexForShip(cmd.shipId);
+    const economy = this.economyPerSystem.get(sysIndex);
+    if (!economy) {
+      return { tradeResult: { success: false, commodityId: cmd.commodityId as CommodityId, quantity: 0, unitPrice: 0, totalPrice: 0, error: 'No economy in this system' } };
+    }
+
+    const isBuy = cmd.type === 'BUY_COMMODITY';
+    const commodityId = cmd.commodityId as CommodityId;
+    const cargo = this.shipCargo.get(cmd.shipId) ?? {};
+
+    const credits = this.playerCredits.get(cmd.shipId) ?? 0;
+    const costBasis = this.playerCostBasis.get(cmd.shipId) ?? {};
+
+    if (isBuy) {
+      // Check cargo capacity
+      const cargoMass = this.getCargoMass(cmd.shipId);
+      const addedMass = cmd.quantity * COMMODITY_DEFS[commodityId].baseMass;
+      if (cargoMass + addedMass > DARTER_MASS.maxCargo) {
+        return { tradeResult: { success: false, commodityId, quantity: 0, unitPrice: 0, totalPrice: 0, error: 'Cargo capacity exceeded' } };
+      }
+    } else {
+      // Check player has enough to sell
+      const held = cargo[commodityId] ?? 0;
+      if (held < cmd.quantity) {
+        return { tradeResult: { success: false, commodityId, quantity: 0, unitPrice: 0, totalPrice: 0, error: 'Insufficient cargo' } };
+      }
+    }
+
+    // Pre-check: get the price from economy to validate credits for buy
+    const listings = economy.getMarketListings(cmd.stationId);
+    const listing = listings.find(l => l.commodityId === commodityId);
+    if (isBuy && listing) {
+      const totalCost = listing.price * cmd.quantity;
+      if (credits < totalCost) {
+        return { tradeResult: { success: false, commodityId, quantity: 0, unitPrice: 0, totalPrice: 0, error: 'Insufficient credits' } };
+      }
+    }
+
+    const result = economy.executeTrade(cmd.stationId, commodityId, cmd.quantity, isBuy);
+    if (!result.success) {
+      return { tradeResult: result };
+    }
+
+    // Update credits and cargo
+    if (isBuy) {
+      this.playerCredits.set(cmd.shipId, credits - result.totalPrice);
+      // Update cost basis (weighted average)
+      const oldQty = cargo[commodityId] ?? 0;
+      const oldAvg = costBasis[commodityId] ?? 0;
+      const newAvg = (oldAvg * oldQty + result.unitPrice * cmd.quantity) / (oldQty + cmd.quantity);
+      costBasis[commodityId] = newAvg;
+      cargo[commodityId] = oldQty + cmd.quantity;
+    } else {
+      this.playerCredits.set(cmd.shipId, credits + result.totalPrice);
+      cargo[commodityId] = (cargo[commodityId] ?? 0) - cmd.quantity;
+      if (cargo[commodityId]! <= 0) {
+        delete cargo[commodityId];
+        delete costBasis[commodityId];
+      }
+    }
+    this.shipCargo.set(cmd.shipId, cargo);
+    this.playerCostBasis.set(cmd.shipId, costBasis);
+
+    // Broadcast market update to subscribers
+    this.broadcastMarketUpdate(sysIndex, cmd.stationId);
+
+    return { tradeResult: result };
   }
 
   private processJumpGate(shipId: string, targetSystemIndex: number): { ship?: ShipSnapshot } {
@@ -552,6 +722,18 @@ export class GameServer {
       this.subsystemTickCounter = 0;
       this.tickSubsystems(gameDt * 20);
     }
+
+    // Economy tick every game-hour
+    this.economyTickAccumulator += gameDt;
+    if (this.economyTickAccumulator >= GameServer.ECONOMY_TICK_INTERVAL) {
+      const hours = this.economyTickAccumulator / 3600;
+      this.economyTickAccumulator = 0;
+      for (const [sysIndex, economy] of this.economyPerSystem) {
+        economy.tick(hours);
+        // Broadcast market updates to subscribers
+        this.broadcastEconomyUpdates(sysIndex);
+      }
+    }
   }
 
   private tickSubsystems(gameDt: number): void {
@@ -581,6 +763,47 @@ export class GameServer {
     const sim = this.shipSubsystems.get(shipId);
     if (!sim || !data) return;
     sim.applyCommand(data as SubsystemCommand);
+  }
+
+  // ── Market broadcasts ──────────────────────────────────────────
+
+  private broadcastEconomyUpdates(systemIndex: number): void {
+    const economy = this.economyPerSystem.get(systemIndex);
+    if (!economy) return;
+
+    for (const session of this.sessions.allConnected()) {
+      if (!session.marketSubscription) continue;
+      const shipSysIndex = this.playerSystems.get(session.shipId) ?? 0;
+      if (shipSysIndex !== systemIndex) continue;
+
+      const listings = economy.getMarketListings(session.marketSubscription);
+      if (listings.length === 0) continue;
+
+      if (session.ws && session.ws.readyState === 1) {
+        session.ws.send(JSON.stringify({
+          type: 'MARKET_UPDATE',
+          gameTime: this.gameTime,
+          data: { stationId: session.marketSubscription, listings },
+        }));
+      }
+    }
+  }
+
+  broadcastMarketUpdate(systemIndex: number, stationId: string): void {
+    const economy = this.economyPerSystem.get(systemIndex);
+    if (!economy) return;
+
+    const listings = economy.getMarketListings(stationId);
+    for (const session of this.sessions.allConnected()) {
+      if (session.marketSubscription !== stationId) continue;
+      if (session.ws && session.ws.readyState === 1) {
+        session.ws.send(JSON.stringify({
+          type: 'MARKET_UPDATE',
+          gameTime: this.gameTime,
+          data: { stationId, listings },
+        }));
+      }
+    }
   }
 
   // ── Snapshots ────────────────────────────────────────────────────
@@ -646,29 +869,34 @@ export class GameServer {
 
     return {
       gameTime: this.gameTime,
-      bodies: cached.bodies.map(b => ({
-        id: b.id,
-        name: b.name,
-        type: b.type,
-        mass: b.mass,
-        position: positions.get(b.id) ?? Vec2Zero,
-        radius: b.radius,
-        color: b.color,
-        elements: b.elements,
-        parentId: b.parentId,
-        planetClass: b.planetClass,
-        ...(b.type === 'star' ? {
-          starInfo: {
-            spectralClass: cached.system.star.spectralClass,
-            spectralSubclass: cached.system.star.spectralSubclass,
-            luminosityClass: cached.system.star.luminosityClass,
-            surfaceTemperature: cached.system.star.surfaceTemperature,
-            luminositySolar: cached.system.star.luminositySolar,
-            massSolar: cached.system.star.mass / 1.989e30,
-            age: cached.system.star.age,
-          },
-        } : {}),
-      })),
+      bodies: cached.bodies.map(b => {
+        const station = cached.system.stations[b.id];
+        return {
+          id: b.id,
+          name: b.name,
+          type: b.type,
+          mass: b.mass,
+          position: positions.get(b.id) ?? Vec2Zero,
+          radius: b.radius,
+          color: b.color,
+          elements: b.elements,
+          parentId: b.parentId,
+          planetClass: b.planetClass,
+          ...(station ? { hasStation: true, stationArchetype: station.archetype } : {}),
+          ...(cached.system.settledBodies[b.id] ? { isSettled: true } : {}),
+          ...(b.type === 'star' ? {
+            starInfo: {
+              spectralClass: cached.system.star.spectralClass,
+              spectralSubclass: cached.system.star.spectralSubclass,
+              luminosityClass: cached.system.star.luminosityClass,
+              surfaceTemperature: cached.system.star.surfaceTemperature,
+              luminositySolar: cached.system.star.luminositySolar,
+              massSolar: cached.system.star.mass / 1.989e30,
+              age: cached.system.star.age,
+            },
+          } : {}),
+        };
+      }),
       ships: systemShips.map(s => this.shipSnapshot(s)),
     };
   }

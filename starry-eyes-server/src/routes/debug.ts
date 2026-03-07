@@ -45,5 +45,19 @@ export function debugRoutes(game: GameServer, sessions: SessionStore): Router {
     res.json({ ship: result.ship });
   });
 
+  router.get('/economy/:systemIndex', (req, res) => {
+    const systemIndex = parseInt(req.params.systemIndex, 10);
+    if (isNaN(systemIndex)) {
+      res.status(400).json({ error: 'Invalid system index' });
+      return;
+    }
+    const economy = game.getEconomy(systemIndex);
+    if (!economy) {
+      res.json({ states: [] });
+      return;
+    }
+    res.json({ states: economy.getAllStates() });
+  });
+
   return router;
 }

@@ -2,6 +2,8 @@ import { Router } from 'express';
 import type { GameServer } from '../GameServer.js';
 import type { SessionStore } from '../session.js';
 import { extractToken } from './auth.js';
+import { computeSettlement, STATION_ARCHETYPE_DEFS } from '@starryeyes/shared';
+import type { StationArchetype } from '@starryeyes/shared';
 
 export function stateRoutes(game: GameServer, sessions: SessionStore): Router {
   const router = Router();
@@ -22,17 +24,23 @@ export function stateRoutes(game: GameServer, sessions: SessionStore): Router {
     const sysIndex = session ? (game.playerSystems.get(session.shipId) ?? 0) : 0;
     const systemBodies = game.getBodiesForSystem(sysIndex);
 
-    const bodies = systemBodies.map(b => ({
-      id: b.id,
-      name: b.name,
-      type: b.type,
-      mass: b.mass,
-      radius: b.radius,
-      color: b.color,
-      elements: b.elements,
-      parentId: b.parentId,
-      planetClass: b.planetClass,
-    }));
+    const sys = game.getGeneratedSystemFor(sysIndex);
+    const bodies = systemBodies.map(b => {
+      const station = sys.stations[b.id];
+      return {
+        id: b.id,
+        name: b.name,
+        type: b.type,
+        mass: b.mass,
+        radius: b.radius,
+        color: b.color,
+        elements: b.elements,
+        parentId: b.parentId,
+        planetClass: b.planetClass,
+        ...(station ? { hasStation: true, stationArchetype: station.archetype } : {}),
+        ...(sys.settledBodies[b.id] ? { isSettled: true } : {}),
+      };
+    });
     res.json({ bodies });
   });
 
@@ -48,10 +56,47 @@ export function stateRoutes(game: GameServer, sessions: SessionStore): Router {
     const sysIndex = session ? (game.playerSystems.get(session.shipId) ?? 0) : 0;
     const sys = game.getGeneratedSystemFor(sysIndex);
 
-    // Star
+    // Star — include settlement info
     if (sys.star.id === id) {
-      res.json({ type: 'star', data: sys.star });
+      const settlement = computeSettlement(sys, sysIndex);
+      res.json({
+        type: 'star',
+        data: sys.star,
+        settlement,
+        stationCount: Object.keys(sys.stations).length,
+      });
       return;
+    }
+
+    // Helper: build station info for a body if it has one
+    function stationInfo(bodyId: string) {
+      const stationData = sys.stations[bodyId];
+      if (!stationData) return undefined;
+      const archetype = stationData.archetype as StationArchetype;
+      const archetypeDef = STATION_ARCHETYPE_DEFS[archetype];
+      const economy = game.getEconomy(sysIndex);
+      const economyState = economy?.getState(bodyId);
+      return {
+        ...stationData,
+        archetypeDef: archetypeDef ? {
+          name: archetypeDef.name,
+          facilities: archetypeDef.facilities,
+          consumptionProfile: archetypeDef.consumptionProfile,
+          basePopulation: archetypeDef.basePopulation,
+          populationCap: archetypeDef.populationCap,
+        } : null,
+        economy: economyState ? {
+          population: Math.round(economyState.population),
+          supplyScore: Math.round(economyState.supplyScore * 100),
+        } : null,
+      };
+    }
+
+    // Helper: build settled body info if it exists
+    function settledInfo(bodyId: string) {
+      const settled = sys.settledBodies[bodyId];
+      if (!settled) return undefined;
+      return settled;
     }
 
     // Planets
@@ -64,6 +109,8 @@ export function stateRoutes(game: GameServer, sessions: SessionStore): Router {
             ...rest,
             moons: moons.map(m => ({ id: m.id, name: m.name })),
           },
+          station: stationInfo(id),
+          settled: settledInfo(id),
         });
         return;
       }
@@ -71,7 +118,7 @@ export function stateRoutes(game: GameServer, sessions: SessionStore): Router {
       // Moons
       for (const moon of planet.moons) {
         if (moon.id === id) {
-          res.json({ type: 'moon', parentPlanet: planet.name, data: moon });
+          res.json({ type: 'moon', parentPlanet: planet.name, data: moon, station: stationInfo(id), settled: settledInfo(id) });
           return;
         }
       }
@@ -80,7 +127,7 @@ export function stateRoutes(game: GameServer, sessions: SessionStore): Router {
     // Asteroids
     for (const asteroid of sys.asteroids) {
       if (asteroid.id === id) {
-        res.json({ type: 'asteroid', data: asteroid });
+        res.json({ type: 'asteroid', data: asteroid, station: stationInfo(id) });
         return;
       }
     }

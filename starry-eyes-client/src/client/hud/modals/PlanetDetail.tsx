@@ -18,7 +18,7 @@ interface PlanetDetailProps {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-type DetailResponse = { type: string; data: any; parentPlanet?: string };
+type DetailResponse = { type: string; data: any; parentPlanet?: string; settlement?: any; stationCount?: number; station?: any; settled?: any };
 
 export function PlanetDetail({ objectId, objectType }: PlanetDetailProps) {
   const [detail, setDetail] = useState<DetailResponse | null>(null);
@@ -51,9 +51,9 @@ export function PlanetDetail({ objectId, objectType }: PlanetDetailProps) {
 
   const { type, data } = detail;
 
-  if (type === 'star') return <StarDetail data={data} />;
-  if (type === 'asteroid') return <AsteroidDetail data={data} />;
-  return <BodyDetail data={data} bodyType={objectType} parentPlanet={detail.parentPlanet} />;
+  if (type === 'star') return <StarDetail data={data} settlement={detail.settlement} stationCount={detail.stationCount} />;
+  if (type === 'asteroid') return <AsteroidDetail data={data} station={detail.station} />;
+  return <BodyDetail data={data} bodyType={type} parentPlanet={detail.parentPlanet} station={detail.station} settled={detail.settled} />;
 }
 
 // ── Star Detail ──────────────────────────────────────────────────────
@@ -65,8 +65,17 @@ const SPECTRAL_LABELS: Record<string, string> = {
   brown_dwarf: 'Brown Dwarf', neutron_star: 'Neutron Star', t_tauri: 'T Tauri',
 };
 
+const SETTLEMENT_LABELS: Record<string, string> = {
+  unexplored: 'Unexplored',
+  surveyed: 'Surveyed',
+  outpost: 'Outpost',
+  settled: 'Settled',
+  developed: 'Developed',
+  prime: 'Prime',
+};
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function StarDetail({ data }: { data: any }) {
+function StarDetail({ data, settlement, stationCount }: { data: any; settlement?: any; stationCount?: number }) {
   const sc = data.spectralClass as string;
   const isSpecial = ['red_giant', 'white_dwarf', 'brown_dwarf', 'neutron_star', 't_tauri'].includes(sc);
   const classification = isSpecial
@@ -87,6 +96,15 @@ function StarDetail({ data }: { data: any }) {
         <Row label="Age" value={formatAge(data.age)} />
         <Row label="Metallicity" value={`[Fe/H] ${(data.metallicity as number).toFixed(2)}`} />
       </Section>
+      {settlement && (
+        <Section title="SETTLEMENT">
+          <Row label="Settlement Level" value={SETTLEMENT_LABELS[settlement.settlementLevel] ?? settlement.settlementLevel} />
+          <Row label="Score" value={`${(settlement.score * 100).toFixed(0)}%`} />
+          <Row label="Resource Diversity" value={`${(settlement.resourceDiversity * 100).toFixed(0)}%`} />
+          <Row label="Habitability" value={`${(settlement.habitability * 100).toFixed(0)}%`} />
+          <Row label="Stations" value={String(stationCount ?? 0)} />
+        </Section>
+      )}
     </div>
   );
 }
@@ -94,7 +112,7 @@ function StarDetail({ data }: { data: any }) {
 // ── Asteroid Detail ──────────────────────────────────────────────────
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function AsteroidDetail({ data }: { data: any }) {
+function AsteroidDetail({ data, station }: { data: any; station?: any }) {
   return (
     <div className="detail-sections">
       <Section title="CLASSIFICATION">
@@ -108,6 +126,7 @@ function AsteroidDetail({ data }: { data: any }) {
         <Row label="Rotation" value={formatRotation(data.rotationPeriod)} />
       </Section>
       <ResourceSection resources={data.resources} />
+      <StationSection station={station} />
     </div>
   );
 }
@@ -115,7 +134,7 @@ function AsteroidDetail({ data }: { data: any }) {
 // ── Planet / Moon Detail ─────────────────────────────────────────────
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function BodyDetail({ data, bodyType, parentPlanet }: { data: any; bodyType: string; parentPlanet?: string }) {
+function BodyDetail({ data, bodyType, parentPlanet, station, settled }: { data: any; bodyType: string; parentPlanet?: string; station?: any; settled?: any }) {
   const phys = data.physical;
   const atmo = data.atmosphere;
   const surf = data.surface;
@@ -225,8 +244,43 @@ function BodyDetail({ data, bodyType, parentPlanet }: { data: any; bodyType: str
       )}
 
       <ResourceSection resources={data.resources} />
+      <SettlementSection settled={settled} atmo={atmo} surf={surf} />
+      <StationSection station={station} />
     </div>
   );
+}
+
+// ── Settlement Section ────────────────────────────────────────────────
+
+function deriveHabitatType(atmo: any, surf: any): string {
+  if (atmo?.breathable) return 'Surface';
+  if (atmo?.present && atmo.surfacePressure > 0.01) {
+    // Atmosphere present but not breathable — domes
+    if (surf?.volcanism === 'extreme' || surf?.surfaceType === 'lava') return 'Underground';
+    return 'Dome';
+  }
+  // No meaningful atmosphere — underground
+  return 'Underground';
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function SettlementSection({ settled, atmo, surf }: { settled?: any; atmo?: any; surf?: any }) {
+  if (!settled) return null;
+  const habitatType = deriveHabitatType(atmo, surf);
+  return (
+    <Section title="SURFACE SETTLEMENT">
+      <Row label="Population" value={formatPopulation(settled.surfacePopulation)} />
+      <Row label="Habitat Type" value={habitatType} />
+      <Row label="Surface Gravity" value={`${settled.surfaceGravityG.toFixed(2)}g`} />
+      <Row label="Habitability" value={`${(settled.habitabilityScore * 100).toFixed(0)}%`} />
+    </Section>
+  );
+}
+
+function formatPopulation(pop: number): string {
+  if (pop >= 1e6) return `${(pop / 1e6).toFixed(1)}M`;
+  if (pop >= 1e3) return `${(pop / 1e3).toFixed(1)}K`;
+  return String(pop);
 }
 
 // ── Shared Components ────────────────────────────────────────────────
@@ -274,6 +328,36 @@ function ResourceSection({ resources }: { resources: any }) {
         );
       })}
     </Section>
+  );
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function StationSection({ station }: { station?: any }) {
+  if (!station) return null;
+  return (
+    <>
+      <Section title="STATION">
+        <Row label="Name" value={station.name} />
+        <Row label="Type" value={snakeCaseToTitle(station.archetype)} />
+        <Row label="Kind" value={station.kind === 'orbital' ? 'Orbital Station' : 'Ground Base'} />
+        {station.archetypeDef && (
+          <Row label="Population Cap" value={String(station.archetypeDef.populationCap)} />
+        )}
+        {station.economy && (
+          <>
+            <Row label="Population" value={String(station.economy.population)} />
+            <Row label="Supply Score" value={`${station.economy.supplyScore}%`} />
+          </>
+        )}
+      </Section>
+      {station.archetypeDef?.facilities && station.archetypeDef.facilities.length > 0 && (
+        <Section title="FACILITIES">
+          {station.archetypeDef.facilities.map((f: { type: string; commodity: string }, i: number) => (
+            <Row key={i} label={snakeCaseToTitle(f.type)} value={snakeCaseToTitle(f.commodity)} />
+          ))}
+        </Section>
+      )}
+    </>
   );
 }
 

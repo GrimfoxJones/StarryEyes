@@ -58,6 +58,7 @@
   /* Layout */
   --left-panel-width: 456px;
   --left-panel-width-sys: 768px;
+  --left-panel-width-dock: 768px;
   --panel-radius: 4px;
   --panel-padding: 10px 14px;
   --transition-speed: 0.3s;

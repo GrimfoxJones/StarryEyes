@@ -8,6 +8,7 @@ export interface Session {
   shipId: string;
   ws: WebSocket | null;
   subsystemsSubscribed: boolean;
+  marketSubscription: string | null; // stationId or null
 }
 
 export class SessionStore {
@@ -17,7 +18,7 @@ export class SessionStore {
     const token = uuidv4();
     const playerId = uuidv4();
     const shipId = `ship_${playerId.slice(0, 8)}`;
-    const session: Session = { token, playerId, playerName, shipId, ws: null, subsystemsSubscribed: false };
+    const session: Session = { token, playerId, playerName, shipId, ws: null, subsystemsSubscribed: false, marketSubscription: null };
     this.sessions.set(token, session);
     return session;
   }

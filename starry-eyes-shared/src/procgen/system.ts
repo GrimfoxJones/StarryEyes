@@ -5,11 +5,13 @@ import { G } from '../constants.js';
 import { generateStar } from './star.js';
 import { generatePlanets } from './planet.js';
 import { generateAsteroids } from './asteroid.js';
+import { generateStations } from './stations.js';
+import { computeSettlement, computeSettledBodies } from './settlement.js';
 import { derivePlanetColor, deriveAsteroidColor } from './colors.js';
 
 const AU = 1.496e11;
 
-export function generateSystem(seed: number): GeneratedSystem {
+export function generateSystem(seed: number, systemIndex = 0): GeneratedSystem {
   const rng = new SeededRng(seed);
 
   const star = generateStar(rng);
@@ -24,6 +26,17 @@ export function generateSystem(seed: number): GeneratedSystem {
 
   const planets = generatePlanets(rng, star, habitableZone, frostLine);
   const asteroids = generateAsteroids(rng, star, planets, frostLine);
+
+  // Build partial system for settlement scoring & station generation
+  const partialSystem: GeneratedSystem = {
+    seed, star, planets, asteroids, stations: {}, settledBodies: {},
+    systemAge: star.age, habitableZone, frostLine,
+    gateOrbitRadius: 0, // computed below
+  };
+  const settlement = computeSettlement(partialSystem, systemIndex);
+  const settledBodies = computeSettledBodies(partialSystem);
+  const stationRng = new SeededRng(seed + 77777);
+  const stations = generateStations(stationRng, partialSystem, settlement, settledBodies);
 
   // Gate orbit: sqrt(luminosity) * AU, clamped and nudged away from planets
   const baseGateRadius = Math.sqrt(star.luminositySolar) * AU;
@@ -46,6 +59,8 @@ export function generateSystem(seed: number): GeneratedSystem {
     star,
     planets,
     asteroids,
+    stations,
+    settledBodies,
     systemAge: star.age,
     habitableZone,
     frostLine,
@@ -168,11 +183,18 @@ export function systemToBodies(system: GeneratedSystem, epoch = 0): CelestialBod
 
 /**
  * Find a suitable starting body for the player ship.
- * Priority: habitable zone planet > largest rocky world > any planet > null.
+ * Priority: highest-pop settled body > habitable zone planet > largest rocky world > any planet > null.
  */
 export function findStartingBody(system: GeneratedSystem): string | null {
-  const { planets, habitableZone } = system;
+  const { planets, habitableZone, settledBodies } = system;
   if (planets.length === 0) return null;
+
+  // Highest-population settled body
+  const settledEntries = Object.values(settledBodies);
+  if (settledEntries.length > 0) {
+    settledEntries.sort((a, b) => b.surfacePopulation - a.surfacePopulation);
+    return settledEntries[0].bodyId;
+  }
 
   // Habitable zone planet
   const hzPlanet = planets.find(p =>

@@ -1,4 +1,5 @@
 import type { StarInfo as StarInfoData } from '@starryeyes/shared';
+import { useGameStore } from '../store.ts';
 
 interface StarInfoProps {
   objectId: string;
@@ -55,6 +56,9 @@ function getTypeLabel(info?: StarInfoData): string {
 }
 
 export function StarInfo({ objectId, starInfo }: StarInfoProps) {
+  const snapshot = useGameStore((s) => s.snapshot);
+  const stationCount = snapshot?.bodies.filter(b => b.hasStation).length ?? 0;
+
   if (!starInfo) {
     return (
       <>
@@ -98,6 +102,10 @@ export function StarInfo({ objectId, starInfo }: StarInfoProps) {
         <div className="info-popup-row">
           <span className="info-popup-row-label">Age</span>
           <span className="info-popup-row-value">{formatAge(starInfo.age)}</span>
+        </div>
+        <div className="info-popup-row">
+          <span className="info-popup-row-label">Stations</span>
+          <span className="info-popup-row-value">{stationCount}</span>
         </div>
       </div>
     </>

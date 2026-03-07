@@ -167,6 +167,8 @@ export interface PlanetResources {
   waterAvailability: ResourceLevel;
   rareMetals: ResourceLevel;
   commonMetals: ResourceLevel;
+  silicates: ResourceLevel;
+  carbon: ResourceLevel;
   radioactives: ResourceLevel;
   hydrocarbons: ResourceLevel;
   volatiles: ResourceLevel;
@@ -241,6 +243,39 @@ export interface GeneratedPlanet {
   moons: GeneratedMoon[];
 }
 
+// ── Settled Bodies ─────────────────────────────────────────────────
+
+export interface SettledBodyData {
+  bodyId: string;
+  surfaceGravityG: number;       // gravity in earth g
+  surfacePopulation: number;     // people on the surface
+  habitabilityScore: number;     // 0-1 composite
+}
+
+// ── Settlement ──────────────────────────────────────────────────────
+
+export type SettlementLevel = 'unexplored' | 'surveyed' | 'outpost' | 'settled' | 'developed' | 'prime';
+
+export interface SystemSettlement {
+  settlementLevel: SettlementLevel;
+  score: number;
+  remoteness: number;
+  resourceDiversity: number;
+  habitability: number;
+}
+
+// ── Station ─────────────────────────────────────────────────────────
+
+export type StationKind = 'orbital' | 'ground';
+
+export interface StationData {
+  name: string;                // e.g., "Tellus II Mining Outpost"
+  archetype: string;           // StationArchetype key
+  kind: StationKind;           // orbital for planets/large moons, ground for asteroids/small bodies
+  initialPopulation: number;
+  surfacePopulation?: number;  // settled planet surface pop (drives demand)
+}
+
 // ── System ───────────────────────────────────────────────────────────
 
 export interface GeneratedSystem {
@@ -248,6 +283,10 @@ export interface GeneratedSystem {
   star: StarParameters;
   planets: GeneratedPlanet[];
   asteroids: GeneratedAsteroid[];
+  /** Map from body ID → station data. A body with an entry here has a station. */
+  stations: Record<string, StationData>;
+  /** Map from body ID → settled body data (planets/moons with surface populations) */
+  settledBodies: Record<string, SettledBodyData>;
   systemAge: number;
   habitableZone: { inner: number; outer: number };
   frostLine: number;

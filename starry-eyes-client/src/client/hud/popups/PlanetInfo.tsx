@@ -1,6 +1,15 @@
 import type { BodySnapshot } from '@starryeyes/shared';
 import type { ObjectType } from '../store.ts';
 
+const ARCHETYPE_LABELS: Record<string, string> = {
+  mining_outpost: 'Mining Outpost',
+  habitat_colony: 'Habitat Colony',
+  water_depot: 'Water Depot',
+  military_base: 'Military Base',
+  shipyard: 'Shipyard',
+  weapon_factory: 'Weapon Factory',
+};
+
 const CLASS_LABELS: Record<string, string> = {
   rocky: 'Rocky',
   super_earth: 'Super Earth',
@@ -62,6 +71,14 @@ export function PlanetInfo({ objectId, objectType, body }: PlanetInfoProps) {
             {body?.elements ? formatPeriod(body.elements.a, body.elements.mu) : '--'}
           </span>
         </div>
+        {body?.hasStation && (
+          <div className="info-popup-row">
+            <span className="info-popup-row-label">Station</span>
+            <span className="info-popup-row-value" style={{ color: 'var(--accent-cyan)' }}>
+              {ARCHETYPE_LABELS[body.stationArchetype ?? ''] ?? 'Present'}
+            </span>
+          </div>
+        )}
       </div>
     </>
   );

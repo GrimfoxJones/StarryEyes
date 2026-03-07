@@ -32,6 +32,10 @@
   width: var(--left-panel-width-sys);
 }
 
+.left-panel.dock {
+  width: var(--left-panel-width-dock);
+}
+
 .left-panel-body {
   display: flex;
   flex: 1;
@@ -75,4 +79,8 @@
 
 .left-panel-toggle.open.sys {
   left: var(--left-panel-width-sys);
+}
+
+.left-panel-toggle.open.dock {
+  left: var(--left-panel-width-dock);
 }

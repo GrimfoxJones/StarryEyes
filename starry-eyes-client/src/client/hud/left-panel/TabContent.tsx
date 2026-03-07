@@ -6,7 +6,10 @@ import { SysOverview } from './sys/SysOverview.tsx';
 import { SubsystemPanel } from './sys/SubsystemPanel.tsx';
 import { CrewRoster } from './crew/CrewRoster.tsx';
 import { OpsOverview } from './ops/OpsOverview.tsx';
+import { CommsPanel } from './ops/CommsPanel.tsx';
 import { DockOverview } from './dock/DockOverview.tsx';
+import { MarketPanel } from './dock/MarketPanel.tsx';
+import { RefuelPanel } from './dock/RefuelPanel.tsx';
 
 const SYS_NODE_MAP: Record<string, string> = {
   NAV: 'navigation',
@@ -43,7 +46,10 @@ export function TabContent() {
 
   if (activeTab === 'CREW' && activeSubTab === 'ROSTER') return <CrewRoster />;
   if (activeTab === 'OPS' && activeSubTab === 'OVERVIEW') return <OpsOverview />;
+  if (activeTab === 'OPS' && activeSubTab === 'COMMS') return <CommsPanel />;
   if (activeTab === 'DOCK' && activeSubTab === 'OVERVIEW') return <DockOverview />;
+  if (activeTab === 'DOCK' && activeSubTab === 'MARKET') return <MarketPanel />;
+  if (activeTab === 'DOCK' && activeSubTab === 'REFUEL') return <RefuelPanel />;
 
   // Fallback to stub
   const tabDef = getTabDef(activeTab);

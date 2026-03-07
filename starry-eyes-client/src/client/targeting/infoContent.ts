@@ -8,7 +8,6 @@ export interface InfoContent {
 }
 
 export function bodyTypeToObjectType(type: BodyType): ObjectType {
-  if (type === 'station') return 'station';
   if (type === 'gate') return 'gate';
   return type as ObjectType;
 }
@@ -25,7 +24,6 @@ export function getInfoContent(
     case 'planet':
     case 'moon':
     case 'asteroid':
-    case 'station':
     case 'gate':
       return getBodyContent(objectId, objectType, snapshot, shipPos);
     case 'ship':
@@ -130,7 +128,6 @@ const CLASS_LABELS: Record<string, string> = {
 function formatBodySubType(body: BodySnapshot): string {
   if (body.type === 'star') return 'Star';
   if (body.type === 'gate') return 'Jump Gate';
-  if (body.type === 'station') return 'Station';
   if (body.planetClass) return CLASS_LABELS[body.planetClass] ?? body.planetClass;
   if (body.type === 'asteroid') return 'Asteroid';
   if (body.type === 'moon') return 'Moon';

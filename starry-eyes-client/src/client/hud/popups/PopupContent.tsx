@@ -1,7 +1,6 @@
 import type { ObjectType } from '../store.ts';
 import { useGameStore } from '../store.ts';
 import { PlanetInfo } from './PlanetInfo.tsx';
-import { StationInfo } from './StationInfo.tsx';
 import { ShipInfo } from './ShipInfo.tsx';
 import { StarInfo } from './StarInfo.tsx';
 
@@ -24,8 +23,6 @@ export function PopupContent({ objectId, objectType }: PopupContentProps) {
       const body = snapshot?.bodies.find((b) => b.id === objectId);
       return <PlanetInfo objectId={objectId} objectType={objectType} body={body} />;
     }
-    case 'station':
-      return <StationInfo objectId={objectId} />;
     case 'ship':
       return <ShipInfo objectId={objectId} />;
   }

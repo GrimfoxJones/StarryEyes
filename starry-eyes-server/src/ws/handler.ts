@@ -79,6 +79,27 @@ export function setupWebSocket(
           case 'SUBSYSTEM_COMMAND':
             game.handleSubsystemCommand(sess.shipId, msg.data);
             break;
+          case 'SUBSCRIBE_MARKET': {
+            const marketData = msg.data as { stationId: string } | undefined;
+            if (marketData?.stationId) {
+              sess.marketSubscription = marketData.stationId;
+              // Send initial market data
+              const sysIndex = game.playerSystems.get(sess.shipId) ?? 0;
+              const economy = game.getEconomy(sysIndex);
+              if (economy) {
+                const listings = economy.getMarketListings(marketData.stationId);
+                ws.send(JSON.stringify({
+                  type: 'MARKET_UPDATE',
+                  gameTime: game.gameTime,
+                  data: { stationId: marketData.stationId, listings },
+                }));
+              }
+            }
+            break;
+          }
+          case 'UNSUBSCRIBE_MARKET':
+            sess.marketSubscription = null;
+            break;
         }
       } catch {
         // Ignore malformed messages
@@ -89,6 +110,7 @@ export function setupWebSocket(
       console.log(`WebSocket disconnected: ${sess.playerName}`);
       sess.ws = null;
       sess.subsystemsSubscribed = false;
+      sess.marketSubscription = null;
 
       const currentSysIndex = game.playerSystems.get(sess.shipId) ?? 0;
       game.broadcastToSystem(currentSysIndex, EVENT_PLAYER_LEFT, {

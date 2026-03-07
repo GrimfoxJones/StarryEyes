@@ -11,10 +11,12 @@ export function LeftPanel() {
   const activeTab = useGameStore((s) => s.activeTab);
   const toggleLeftPanel = useGameStore((s) => s.toggleLeftPanel);
   const isSys = activeTab === 'SYS';
+  const isDock = activeTab === 'DOCK';
+  const wideClass = isSys ? ' sys' : isDock ? ' dock' : '';
 
   return (
     <div className="left-panel-container">
-      <div className={`left-panel${open ? ' open' : ''}${isSys ? ' sys' : ''}`}>
+      <div className={`left-panel${open ? ' open' : ''}${wideClass}`}>
         <TabBar />
         <Breadcrumb />
         <SchematicPanel />
@@ -26,7 +28,7 @@ export function LeftPanel() {
         </div>
       </div>
       <button
-        className={`left-panel-toggle${open ? ' open' : ''}${isSys ? ' sys' : ''}`}
+        className={`left-panel-toggle${open ? ' open' : ''}${wideClass}`}
         onClick={toggleLeftPanel}
         title="Toggle panel (Tab)"
       >

@@ -74,7 +74,7 @@ export interface OrbitalElements {
 
 // ── Celestial Body ──────────────────────────────────────────────────
 
-export type BodyType = 'star' | 'planet' | 'moon' | 'asteroid' | 'station' | 'gate';
+export type BodyType = 'star' | 'planet' | 'moon' | 'asteroid' | 'gate';
 
 export interface CelestialBody {
   readonly id: string;
@@ -150,6 +150,9 @@ export interface BodySnapshot {
   readonly parentId: string | null;
   readonly starInfo?: StarInfo;
   readonly planetClass?: string;
+  readonly hasStation?: boolean;
+  readonly stationArchetype?: string;
+  readonly isSettled?: boolean;
 }
 
 export interface ShipSnapshot {
@@ -182,4 +185,7 @@ export type PlayerCommand =
   | { readonly type: 'SET_DESTINATION'; readonly shipId: string; readonly destination: Destination; readonly acceleration?: number }
   | { readonly type: 'CANCEL_ROUTE'; readonly shipId: string }
   | { readonly type: 'UNDOCK'; readonly shipId: string }
-  | { readonly type: 'JUMP_GATE'; readonly shipId: string; readonly targetSystemIndex: number };
+  | { readonly type: 'JUMP_GATE'; readonly shipId: string; readonly targetSystemIndex: number }
+  | { readonly type: 'BUY_COMMODITY'; readonly shipId: string; readonly stationId: string; readonly commodityId: string; readonly quantity: number }
+  | { readonly type: 'SELL_COMMODITY'; readonly shipId: string; readonly stationId: string; readonly commodityId: string; readonly quantity: number }
+  | { readonly type: 'REFUEL'; readonly shipId: string; readonly amount: number };

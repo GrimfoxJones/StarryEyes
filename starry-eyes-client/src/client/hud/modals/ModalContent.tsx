@@ -1,6 +1,5 @@
 import type { ObjectType } from '../store.ts';
 import { PlanetDetail } from './PlanetDetail.tsx';
-import { StationDetail } from './StationDetail.tsx';
 
 interface ModalContentProps {
   objectId: string;
@@ -14,8 +13,6 @@ export function ModalContent({ objectId, objectType }: ModalContentProps) {
     case 'moon':
     case 'asteroid':
       return <PlanetDetail objectId={objectId} objectType={objectType} />;
-    case 'station':
-      return <StationDetail objectId={objectId} />;
     case 'ship':
       return (
         <div style={{ padding: 16 }}>

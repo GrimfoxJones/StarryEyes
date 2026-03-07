@@ -1,11 +1,11 @@
 import { create } from 'zustand';
-import type { SystemSnapshot, Destination, SubsystemSnapshot } from '@starryeyes/shared';
+import type { SystemSnapshot, Destination, SubsystemSnapshot, MarketListing, CargoManifest } from '@starryeyes/shared';
 import type { GateConnectionInfo } from '@starryeyes/shared';
 import type { ISimulationBridge } from '../../bridge.ts';
 import { TAB_DEFAULTS } from './left-panel/tabConfig.ts';
 
 export type PrimaryTab = 'SYS' | 'CREW' | 'OPS' | 'DOCK';
-export type ObjectType = 'star' | 'planet' | 'moon' | 'asteroid' | 'station' | 'gate' | 'ship';
+export type ObjectType = 'star' | 'planet' | 'moon' | 'asteroid' | 'gate' | 'ship';
 
 export interface PopupState {
   objectId: string;
@@ -44,6 +44,7 @@ interface GameState {
   activeTab: PrimaryTab;
   activeSubTab: string;
   isDocked: boolean;
+  setIsDocked: (docked: boolean) => void;
   toggleLeftPanel: () => void;
   openLeftPanel: () => void;
   closeLeftPanel: () => void;
@@ -90,6 +91,17 @@ interface GameState {
   prevSubsystemSnapshot: SubsystemSnapshot | null;
   subsystemReceiveTime: number;
   updateSubsystems: (snapshot: SubsystemSnapshot) => void;
+
+  // Market & cargo state
+  marketListings: MarketListing[] | null;
+  setMarketListings: (listings: MarketListing[]) => void;
+  clearMarketListings: () => void;
+  cargoManifest: CargoManifest | null;
+  cargoMass: number;
+  maxCargo: number;
+  credits: number;
+  costBasis: Partial<Record<string, number>>;
+  setCargoManifest: (cargo: CargoManifest, cargoMass: number, maxCargo: number, credits?: number, costBasis?: Partial<Record<string, number>>) => void;
 }
 
 export const useGameStore = create<GameState>((set) => ({
@@ -106,6 +118,14 @@ export const useGameStore = create<GameState>((set) => ({
   activeTab: 'OPS',
   activeSubTab: 'OVERVIEW',
   isDocked: false,
+  setIsDocked: (docked) => set((s) => {
+    const updates: Partial<GameState> = { isDocked: docked };
+    if (!docked && s.activeTab === 'DOCK') {
+      updates.activeTab = 'OPS';
+      updates.activeSubTab = TAB_DEFAULTS['OPS'];
+    }
+    return updates;
+  }),
   toggleLeftPanel: () => set((s) => ({ leftPanelOpen: !s.leftPanelOpen })),
   openLeftPanel: () => set({ leftPanelOpen: true }),
   closeLeftPanel: () => set({ leftPanelOpen: false }),
@@ -156,4 +176,21 @@ export const useGameStore = create<GameState>((set) => ({
     subsystemSnapshot: snapshot,
     subsystemReceiveTime: performance.now(),
   })),
+
+  // Market & cargo state
+  marketListings: null,
+  setMarketListings: (listings) => set({ marketListings: listings }),
+  clearMarketListings: () => set({ marketListings: null }),
+  cargoManifest: null,
+  cargoMass: 0,
+  maxCargo: 40000,
+  credits: 0,
+  costBasis: {},
+  setCargoManifest: (cargo, cargoMass, maxCargo, credits, costBasis) => set({
+    cargoManifest: cargo,
+    cargoMass,
+    maxCargo,
+    ...(credits !== undefined ? { credits } : {}),
+    ...(costBasis !== undefined ? { costBasis } : {}),
+  }),
 }));

@@ -58,6 +58,7 @@ export class RemoteBridge implements ISimulationBridge {
   private soiTable: SOIEntry[] = [];
   private _soiParentId = 'sol'; // default; updated after connect
   private starInfoMap = new Map<string, StarInfo>();
+  private stationFlags = new Map<string, { hasStation: boolean; stationArchetype?: string; isSettled?: boolean }>();
   currentSystemIndex = 0;
 
   constructor(serverUrl = '', heartbeatIntervalMs = 1000) {
@@ -216,6 +217,70 @@ export class RemoteBridge implements ISimulationBridge {
     this.wsSend({ type: 'SUBSYSTEM_COMMAND', data: cmd });
   }
 
+  // ── Market subscriptions ──────────────────────────────────────
+
+  subscribeMarket(stationId: string): void {
+    this.wsSend({ type: 'SUBSCRIBE_MARKET', data: { stationId } });
+  }
+
+  unsubscribeMarket(): void {
+    this.wsSend({ type: 'UNSUBSCRIBE_MARKET' });
+  }
+
+  async fetchCargo(): Promise<void> {
+    try {
+      const res = await fetch(`${this.serverUrl}/api/economy/cargo`, {
+        headers: { 'Authorization': `Bearer ${this.sessionToken}` },
+      });
+      if (res.ok) {
+        const data = await res.json() as { cargo: Record<string, number>; cargoMass: number; maxCargo: number; credits: number; costBasis: Partial<Record<string, number>> };
+        useGameStore.getState().setCargoManifest(data.cargo, data.cargoMass, data.maxCargo, data.credits, data.costBasis);
+      }
+    } catch { /* ignore */ }
+  }
+
+  async executeRefuel(amount: number): Promise<{ success: boolean; amount?: number; cost?: number; error?: string }> {
+    try {
+      const res = await fetch(`${this.serverUrl}/api/economy/refuel`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${this.sessionToken}`,
+        },
+        body: JSON.stringify({ amount }),
+      });
+      const result = await res.json() as { success: boolean; amount?: number; cost?: number; error?: string };
+      if (result.success) {
+        await this.fetchCargo();
+      }
+      return result;
+    } catch {
+      return { success: false, error: 'Network error' };
+    }
+  }
+
+  async executeTrade(stationId: string, commodityId: string, quantity: number, isBuy: boolean): Promise<{ success: boolean; error?: string }> {
+    const endpoint = isBuy ? 'buy' : 'sell';
+    try {
+      const res = await fetch(`${this.serverUrl}/api/economy/${endpoint}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${this.sessionToken}`,
+        },
+        body: JSON.stringify({ stationId, commodityId, quantity }),
+      });
+      const result = await res.json() as { success: boolean; error?: string };
+      if (result.success) {
+        // Refresh cargo
+        await this.fetchCargo();
+      }
+      return result;
+    } catch {
+      return { success: false, error: 'Network error' };
+    }
+  }
+
   private wsSend(msg: unknown): void {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify(msg));
@@ -244,6 +309,7 @@ export class RemoteBridge implements ISimulationBridge {
       parentId: b.parentId,
       planetClass: b.planetClass,
       ...(this.starInfoMap.has(b.id) ? { starInfo: this.starInfoMap.get(b.id)! } : {}),
+      ...(this.stationFlags.has(b.id) ? this.stationFlags.get(b.id)! : {}),
     }));
 
     // Interpolate ship positions
@@ -447,6 +513,12 @@ export class RemoteBridge implements ISimulationBridge {
         break;
       }
 
+      case 'MARKET_UPDATE': {
+        const data = msg.data as { stationId: string; listings: import('@starryeyes/shared').MarketListing[] };
+        useGameStore.getState().setMarketListings(data.listings);
+        break;
+      }
+
       case 'SYSTEM_CHANGED': {
         const data = msg.data as { seed: number; systemIndex?: number; snapshot: SystemSnapshot };
         if (data.systemIndex != null) this.currentSystemIndex = data.systemIndex;
@@ -473,6 +545,7 @@ export class RemoteBridge implements ISimulationBridge {
         }));
         this.soiTable = buildSOITable(this.bodies);
         this.starInfoMap.clear();
+        this.stationFlags.clear();
         const star = this.bodies.find(b => b.type === 'star');
         if (star) this._soiParentId = star.id;
         this.applyServerSnapshot(data.snapshot);
@@ -487,9 +560,16 @@ export class RemoteBridge implements ISimulationBridge {
     this.lastShips = state.ships;
     this.latestSnapshot = state;
 
-    // Cache starInfo from server snapshots
+    // Cache starInfo and station/settlement flags from server snapshots
     for (const b of state.bodies) {
       if (b.starInfo) this.starInfoMap.set(b.id, b.starInfo);
+      if (b.hasStation || b.isSettled) {
+        this.stationFlags.set(b.id, {
+          hasStation: !!b.hasStation,
+          stationArchetype: b.stationArchetype,
+          isSettled: b.isSettled,
+        });
+      }
     }
 
     this.notifyCallbacks(state);

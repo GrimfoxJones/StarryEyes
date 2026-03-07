@@ -27,8 +27,10 @@ export function generateResources(
         waterAvailability: rLevel(rng, 1),
         rareMetals: rLevel(rng, 0),
         commonMetals: rLevel(rng, 1),
+        silicates: rLevel(rng, 0),
+        carbon: rLevel(rng, 0),
         radioactives: rLevel(rng, 0),
-        hydrocarbons: rLevel(rng, 2),
+        hydrocarbons: rLevel(rng, 3),
         volatiles: rLevel(rng, 4),
         exotics: rLevel(rng, 1),
       };
@@ -37,6 +39,8 @@ export function generateResources(
         waterAvailability: rLevel(rng, 4),
         rareMetals: rLevel(rng, 0),
         commonMetals: rLevel(rng, 1),
+        silicates: rLevel(rng, 0),
+        carbon: rLevel(rng, 0),
         radioactives: rLevel(rng, 0),
         hydrocarbons: rLevel(rng, 3),
         volatiles: rLevel(rng, 4),
@@ -48,12 +52,15 @@ export function generateResources(
   // Rocky / super-earth / mini-neptune / dwarf
   const ironCore = interior.coreType === 'iron_nickel';
   const iceCore = interior.coreType === 'ice';
+  const silicateMantle = interior.mantleComposition.some(m => m.material === 'silicate' && m.fraction >= 0.3);
   const surfType = surface?.surfaceType;
 
   return {
     waterAvailability: iceCore || surfType === 'oceanic' || surfType === 'frozen' ? rLevel(rng, 4) : rLevel(rng, 1),
     rareMetals: ironCore ? rLevel(rng, 3) : rLevel(rng, 1),
     commonMetals: ironCore ? rLevel(rng, 4) : rLevel(rng, 2),
+    silicates: silicateMantle ? rLevel(rng, 3) : rLevel(rng, 1),
+    carbon: surfType === 'carbon' ? rLevel(rng, 4) : rLevel(rng, 0),
     radioactives: surfType === 'volcanic' ? rLevel(rng, 3) : rLevel(rng, 1),
     hydrocarbons: surfType === 'carbon' ? rLevel(rng, 5) : rLevel(rng, 1),
     volatiles: zone === 'cold' || zone === 'outer' ? rLevel(rng, 3) : rLevel(rng, 1),
@@ -68,8 +75,10 @@ export function generateAsteroidResources(rng: SeededRng, composition: AsteroidC
         waterAvailability: rLevel(rng, 3),
         rareMetals: rLevel(rng, 1),
         commonMetals: rLevel(rng, 1),
+        silicates: rLevel(rng, 1),
+        carbon: rLevel(rng, 4),
         radioactives: rLevel(rng, 0),
-        hydrocarbons: rLevel(rng, 4),
+        hydrocarbons: rLevel(rng, 2),
         volatiles: rLevel(rng, 2),
         exotics: rLevel(rng, 0),
       };
@@ -78,6 +87,8 @@ export function generateAsteroidResources(rng: SeededRng, composition: AsteroidC
         waterAvailability: rLevel(rng, 1),
         rareMetals: rLevel(rng, 3),
         commonMetals: rLevel(rng, 3),
+        silicates: rLevel(rng, 4),
+        carbon: rLevel(rng, 0),
         radioactives: rLevel(rng, 1),
         hydrocarbons: rLevel(rng, 0),
         volatiles: rLevel(rng, 0),
@@ -88,6 +99,8 @@ export function generateAsteroidResources(rng: SeededRng, composition: AsteroidC
         waterAvailability: rLevel(rng, 0),
         rareMetals: rLevel(rng, 4),
         commonMetals: rLevel(rng, 4),
+        silicates: rLevel(rng, 2),
+        carbon: rLevel(rng, 0),
         radioactives: rLevel(rng, 1),
         hydrocarbons: rLevel(rng, 0),
         volatiles: rLevel(rng, 0),
@@ -98,6 +111,8 @@ export function generateAsteroidResources(rng: SeededRng, composition: AsteroidC
         waterAvailability: rLevel(rng, 4),
         rareMetals: rLevel(rng, 0),
         commonMetals: rLevel(rng, 0),
+        silicates: rLevel(rng, 0),
+        carbon: rLevel(rng, 0),
         radioactives: rLevel(rng, 0),
         hydrocarbons: rLevel(rng, 1),
         volatiles: rLevel(rng, 4),

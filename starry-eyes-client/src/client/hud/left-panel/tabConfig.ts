@@ -23,6 +23,7 @@ export const TABS: TabDef[] = [
       { id: 'SCAN', label: 'SCAN', description: 'Asteroid & body scanning' },
       { id: 'PROBES', label: 'PROBES', description: 'Deployed probes & telemetry' },
       { id: 'MISSIONS', label: 'MISSIONS', description: 'Active mission log & objectives' },
+      { id: 'COMMS', label: 'COMMS', description: 'Communications & station link' },
     ],
   },
   {

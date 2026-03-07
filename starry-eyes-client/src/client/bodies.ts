@@ -14,7 +14,7 @@ export function isMoonHidden(
   bodies: readonly BodySnapshot[],
   camera: Camera,
 ): boolean {
-  if ((body.type !== 'moon' && body.type !== 'station') || !body.parentId) return false;
+  if (body.type !== 'moon' || !body.parentId) return false;
   const parent = bodies.find(b => b.id === body.parentId);
   if (!parent) return false;
   const moonScreen = camera.simToScreen(body.position.x, body.position.y);
@@ -53,7 +53,7 @@ export class BodyRenderer {
 
       // Moon visibility: fade out when close to parent on screen
       let moonAlpha = 1;
-      if ((body.type === 'moon' || body.type === 'station') && body.parentId) {
+      if (body.type === 'moon' && body.parentId) {
         const parent = bodyById.get(body.parentId);
         if (parent) {
           const moonScreen = camera.simToScreen(body.position.x, body.position.y);
@@ -183,6 +183,21 @@ export class BodyRenderer {
     if (body.type === 'star') {
       gfx.circle(0, 0, pixelRadius * 2);
       gfx.fill({ color: body.color, alpha: 0.15 });
+    }
+
+    // Orbital station ring(s)
+    if (body.hasStation) {
+      const isLarge = body.stationArchetype === 'habitat_colony'
+        || body.stationArchetype === 'shipyard'
+        || body.stationArchetype === 'military_base';
+      const ring1 = pixelRadius + 3;
+      gfx.circle(0, 0, ring1);
+      gfx.stroke({ width: 1, color: 0x44AAFF, alpha: 0.6 * moonAlpha });
+      if (isLarge) {
+        const ring2 = pixelRadius + 6;
+        gfx.circle(0, 0, ring2);
+        gfx.stroke({ width: 1, color: 0x44AAFF, alpha: 0.4 * moonAlpha });
+      }
     }
 
     gfx.x = screen.x;

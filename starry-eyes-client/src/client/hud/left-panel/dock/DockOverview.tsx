@@ -1,4 +1,15 @@
 import { StatusDot } from '../StatusDot.tsx';
+import { useGameStore } from '../../store.ts';
+import type { RemoteBridge } from '../../../../RemoteBridge.ts';
+
+const ARCHETYPE_LABELS: Record<string, string> = {
+  mining_outpost: 'Mining Outpost',
+  habitat_colony: 'Habitat Colony',
+  water_depot: 'Water Depot',
+  military_base: 'Military Base',
+  shipyard: 'Shipyard',
+  weapon_factory: 'Weapon Factory',
+};
 
 interface Service {
   label: string;
@@ -15,6 +26,22 @@ const SERVICES: Service[] = [
 ];
 
 export function DockOverview() {
+  const snapshot = useGameStore((s) => s.snapshot);
+  const bridge = useGameStore((s) => s.bridge) as RemoteBridge | null;
+  const setIsDocked = useGameStore((s) => s.setIsDocked);
+
+  const myShip = snapshot?.ships.find(s => s.id === bridge?.getMyShipId());
+  const orbitBodyId = myShip?.orbitBodyId ?? null;
+  const orbitBody = snapshot?.bodies.find(b => b.id === orbitBodyId);
+  const hasStation = orbitBody?.hasStation ?? false;
+
+  const stationName = hasStation
+    ? `${orbitBody!.name} Station`
+    : orbitBody?.name ?? 'Unknown';
+  const archetype = orbitBody?.stationArchetype
+    ? (ARCHETYPE_LABELS[orbitBody.stationArchetype] ?? 'Station')
+    : 'No Station';
+
   return (
     <div style={{ padding: '12px 8px' }}>
       <div style={{
@@ -29,10 +56,18 @@ export function DockOverview() {
       <div style={{
         color: 'var(--text-bright)',
         fontSize: 14,
+        marginBottom: 4,
+        paddingLeft: 4,
+      }}>
+        {stationName}
+      </div>
+      <div style={{
+        color: 'var(--accent-cyan)',
+        fontSize: 'var(--font-size-sm)',
         marginBottom: 16,
         paddingLeft: 4,
       }}>
-        Tycho Station
+        {archetype}
       </div>
       <div style={{
         color: 'var(--text-label)',
@@ -66,6 +101,30 @@ export function DockOverview() {
           </span>
         </div>
       ))}
+
+      <button
+        onClick={() => {
+          if (bridge && myShip) {
+            bridge.sendCommand({ type: 'UNDOCK', shipId: myShip.id });
+          }
+          setIsDocked(false);
+        }}
+        style={{
+          width: 'calc(100% - 8px)',
+          margin: '16px 4px 0',
+          padding: '8px 12px',
+          background: 'rgba(255, 150, 0, 0.15)',
+          border: '1px solid rgba(255, 150, 0, 0.4)',
+          color: 'var(--status-warning)',
+          borderRadius: 3,
+          fontSize: 'var(--font-size-sm)',
+          fontFamily: 'var(--font-mono)',
+          letterSpacing: 1,
+          cursor: 'pointer',
+        }}
+      >
+        UNDOCK
+      </button>
     </div>
   );
 }
