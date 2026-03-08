@@ -1,5 +1,6 @@
 import type { BodySnapshot } from '@starryeyes/shared';
 import type { ObjectType } from '../store.ts';
+import { useGameStore } from '../store.ts';
 
 const ARCHETYPE_LABELS: Record<string, string> = {
   mining_outpost: 'Mining Outpost',
@@ -35,6 +36,19 @@ function formatPeriod(a: number, mu: number): string {
   return `${(T / 60).toFixed(0)} min`;
 }
 
+function demandArrows(level: 0 | 1 | 2 | 3): string {
+  if (level === 3) return '\u25B2\u25B2\u25B2';
+  if (level === 2) return '\u25B2\u25B2';
+  if (level === 1) return '\u25B2';
+  return '';
+}
+
+function demandColor(level: 0 | 1 | 2 | 3): string {
+  if (level >= 2) return 'var(--status-nominal)';
+  if (level === 1) return 'var(--status-warning)';
+  return 'var(--text-hint)';
+}
+
 interface PlanetInfoProps {
   objectId: string;
   objectType: ObjectType;
@@ -47,6 +61,9 @@ export function PlanetInfo({ objectId, objectType, body }: PlanetInfoProps) {
   const classLabel = body?.planetClass
     ? (CLASS_LABELS[body.planetClass] ?? body.planetClass)
     : '--';
+
+  const tradeSummaries = useGameStore((s) => s.tradeSummaries);
+  const summary = tradeSummaries.find(ts => ts.bodyId === objectId);
 
   return (
     <>
@@ -77,6 +94,34 @@ export function PlanetInfo({ objectId, objectType, body }: PlanetInfoProps) {
             <span className="info-popup-row-value" style={{ color: 'var(--accent-cyan)' }}>
               {ARCHETYPE_LABELS[body.stationArchetype ?? ''] ?? 'Present'}
             </span>
+          </div>
+        )}
+        {summary && (
+          <div style={{ borderTop: '1px solid var(--border-subtle)', marginTop: 4, paddingTop: 4 }}>
+            <div style={{ color: 'var(--text-label)', fontSize: 'var(--font-size-xs)', letterSpacing: 1, marginBottom: 3 }}>TRADE</div>
+            {summary.imports.length > 0 && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2px 6px', marginBottom: 2 }}>
+                <span style={{ color: 'var(--text-label)', fontSize: 'var(--font-size-sm)', marginRight: 2 }}>Buying:</span>
+                {summary.imports.map(imp => (
+                  <span key={imp.commodityId} style={{ fontSize: 'var(--font-size-sm)', color: demandColor(imp.demandLevel) }}>
+                    {imp.name}{demandArrows(imp.demandLevel) ? ` ${demandArrows(imp.demandLevel)}` : ''}
+                  </span>
+                ))}
+              </div>
+            )}
+            {summary.exports.length > 0 && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2px 6px' }}>
+                <span style={{ color: 'var(--text-label)', fontSize: 'var(--font-size-sm)', marginRight: 2 }}>Selling:</span>
+                {summary.exports.map(exp => (
+                  <span key={exp.commodityId} style={{
+                    fontSize: 'var(--font-size-sm)',
+                    color: exp.outOfStock ? 'var(--text-hint)' : 'var(--text-primary)',
+                  }}>
+                    {exp.name}{exp.outOfStock ? ' (Out)' : ''}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>

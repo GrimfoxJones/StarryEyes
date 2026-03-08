@@ -5,7 +5,7 @@ export const DARTER_SCHEMATIC_ID = 'darter-freighter';
 /** Darter-class Light Freighter mass configuration */
 export const DARTER_MASS = {
   hull: 14000,
-  maxCargo: 40000,
+  maxCargo: 8000,
   maxPropellant: 8000,
   fuelConsumptionRate: 0.02, // kg/s at full thrust
   maxAcceleration: 9.81, // m/s² (~1g)
@@ -298,8 +298,8 @@ export const DARTER_DEFINITION: SubsystemNode = {
       category: 'cargo',
       status: 'OFFLINE',
       values: {
-        total_capacity: { value: 40000, unit: 'kg', precision: 0, control: 'simulated', displayHint: 'number', interpolation: 'snap' },
-        total_used: { value: 0, unit: 'kg', precision: 0, min: 0, max: 40000, control: 'simulated', displayHint: 'bar', interpolation: 'snap' },
+        total_capacity: { value: 8000, unit: 'kg', precision: 0, control: 'simulated', displayHint: 'number', interpolation: 'snap' },
+        total_used: { value: 0, unit: 'kg', precision: 0, min: 0, max: 8000, control: 'simulated', displayHint: 'bar', interpolation: 'snap' },
         mass_fraction: { value: 0, min: 0, max: 1, precision: 3, control: 'simulated', displayHint: 'bar', interpolation: 'snap' },
       },
       children: [
@@ -309,8 +309,8 @@ export const DARTER_DEFINITION: SubsystemNode = {
           category: 'cargo',
           status: 'OFFLINE',
           values: {
-            capacity: { value: 40000, unit: 'kg', precision: 0, control: 'simulated', displayHint: 'number' },
-            used: { value: 0, unit: 'kg', precision: 0, min: 0, max: 40000, control: 'simulated', displayHint: 'bar' },
+            capacity: { value: 8000, unit: 'kg', precision: 0, control: 'simulated', displayHint: 'number' },
+            used: { value: 0, unit: 'kg', precision: 0, min: 0, max: 8000, control: 'simulated', displayHint: 'bar' },
           },
           children: [],
         },
@@ -362,9 +362,9 @@ export const DARTER_DEFINITION: SubsystemNode = {
           status: 'NOMINAL',
           values: {
             empty_mass: { value: 14000, unit: 'kg', precision: 0, control: 'simulated', displayHint: 'number' },
-            gross_mass: { value: 62000, unit: 'kg', precision: 0, control: 'simulated', displayHint: 'number' },
+            gross_mass: { value: 30000, unit: 'kg', precision: 0, control: 'simulated', displayHint: 'number' },
             max_fuel: { value: 8000, unit: 'kg', precision: 0, control: 'simulated', displayHint: 'number' },
-            max_cargo: { value: 40000, unit: 'kg', precision: 0, control: 'simulated', displayHint: 'number' },
+            max_cargo: { value: 8000, unit: 'kg', precision: 0, control: 'simulated', displayHint: 'number' },
           },
           children: [],
         },

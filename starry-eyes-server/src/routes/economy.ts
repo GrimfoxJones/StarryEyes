@@ -2,6 +2,7 @@ import { Router } from 'express';
 import type { SessionStore } from '../session.js';
 import type { GameServer } from '../GameServer.js';
 import { extractToken } from './auth.js';
+import { DARTER_MASS } from '@starryeyes/shared';
 
 export function economyRoutes(sessions: SessionStore, game: GameServer): Router {
   const router = Router();
@@ -32,6 +33,29 @@ export function economyRoutes(sessions: SessionStore, game: GameServer): Router 
     }
     const listings = economy.getMarketListings(req.params.stationId);
     res.json({ listings });
+  });
+
+  router.get('/trade-summary', (req, res) => {
+    const session = (req as unknown as { session: { shipId: string } }).session;
+    const sysIndex = game.playerSystems.get(session.shipId) ?? 0;
+    const economy = game.getEconomy(sysIndex);
+    if (!economy) {
+      res.json({ summaries: [] });
+      return;
+    }
+    const summaries = economy.getTradeSummaries();
+    res.json({ summaries });
+  });
+
+  router.get('/system-prices', (req, res) => {
+    const session = (req as unknown as { session: { shipId: string } }).session;
+    const sysIndex = game.playerSystems.get(session.shipId) ?? 0;
+    const economy = game.getEconomy(sysIndex);
+    if (!economy) {
+      res.json({ averages: {} });
+      return;
+    }
+    res.json({ averages: economy.getSystemAverages() });
   });
 
   router.post('/buy', (req, res) => {
@@ -98,7 +122,7 @@ export function economyRoutes(sessions: SessionStore, game: GameServer): Router 
     const cargoMass = game.getCargoMass(session.shipId);
     const credits = game.playerCredits.get(session.shipId) ?? 0;
     const costBasis = game.playerCostBasis.get(session.shipId) ?? {};
-    res.json({ cargo, cargoMass, maxCargo: 40000, credits, costBasis });
+    res.json({ cargo, cargoMass, maxCargo: DARTER_MASS.maxCargo, credits, costBasis });
   });
 
   return router;

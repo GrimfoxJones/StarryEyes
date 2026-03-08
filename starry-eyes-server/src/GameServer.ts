@@ -27,6 +27,7 @@ import {
 } from '@starryeyes/shared';
 import type { GeneratedSystem, GateConnectionInfo } from '@starryeyes/shared';
 import { EconomySimulator } from './economy/EconomySimulator.js';
+import { logTrade } from './tradeLogger.js';
 import { TICK_RATE_MS } from './config.js';
 import { SubsystemSimulator } from './subsystems/SubsystemSimulator.js';
 import { EVENT_SUBSYSTEM_UPDATE } from './ws/events.js';
@@ -67,8 +68,8 @@ export class GameServer {
   playerCredits = new Map<string, number>();
   playerCostBasis = new Map<string, Partial<Record<CommodityId, number>>>();
   private static STARTING_CREDITS = 10000;
-  private economyTickAccumulator = 0;
-  private static ECONOMY_TICK_INTERVAL = 3600; // game-seconds per economy tick (1 game-hour)
+  private lastEconomyTickWallMs = Date.now();
+  private static ECONOMY_TICK_WALL_MS = 30000; // 30-second wall-clock tick
 
   constructor(sessions: SessionStore, broadcastFn: (message: string) => void) {
     this.broadcastFn = broadcastFn;
@@ -495,48 +496,57 @@ export class GameServer {
     const credits = this.playerCredits.get(cmd.shipId) ?? 0;
     const costBasis = this.playerCostBasis.get(cmd.shipId) ?? {};
 
+    let quantity = cmd.quantity;
+
     if (isBuy) {
-      // Check cargo capacity
+      // Clamp by cargo capacity
       const cargoMass = this.getCargoMass(cmd.shipId);
-      const addedMass = cmd.quantity * COMMODITY_DEFS[commodityId].baseMass;
-      if (cargoMass + addedMass > DARTER_MASS.maxCargo) {
-        return { tradeResult: { success: false, commodityId, quantity: 0, unitPrice: 0, totalPrice: 0, error: 'Cargo capacity exceeded' } };
+      const unitMass = COMMODITY_DEFS[commodityId].baseMass;
+      if (unitMass > 0) {
+        const byCapacity = Math.floor((DARTER_MASS.maxCargo - cargoMass) / unitMass);
+        quantity = Math.min(quantity, byCapacity);
+      }
+
+      // Clamp by credits (get price from economy state)
+      const stationState = economy.getState(cmd.stationId);
+      if (stationState) {
+        const unitPrice = stationState.askPrices[commodityId] ?? COMMODITY_DEFS[commodityId].basePrice;
+        if (unitPrice > 0) {
+          const byCredits = Math.floor(credits / unitPrice);
+          quantity = Math.min(quantity, byCredits);
+        }
+      }
+
+      if (quantity <= 0) {
+        return { tradeResult: { success: false, commodityId, quantity: 0, unitPrice: 0, totalPrice: 0, error: 'Cannot afford or no cargo space' } };
       }
     } else {
-      // Check player has enough to sell
+      // Clamp sell quantity by held amount
       const held = cargo[commodityId] ?? 0;
-      if (held < cmd.quantity) {
+      quantity = Math.min(quantity, held);
+      if (quantity <= 0) {
         return { tradeResult: { success: false, commodityId, quantity: 0, unitPrice: 0, totalPrice: 0, error: 'Insufficient cargo' } };
       }
     }
 
-    // Pre-check: get the price from economy to validate credits for buy
-    const listings = economy.getMarketListings(cmd.stationId);
-    const listing = listings.find(l => l.commodityId === commodityId);
-    if (isBuy && listing) {
-      const totalCost = listing.price * cmd.quantity;
-      if (credits < totalCost) {
-        return { tradeResult: { success: false, commodityId, quantity: 0, unitPrice: 0, totalPrice: 0, error: 'Insufficient credits' } };
-      }
-    }
-
-    const result = economy.executeTrade(cmd.stationId, commodityId, cmd.quantity, isBuy);
+    // Execute the trade (economy will further clamp by stock/capacity)
+    const result = economy.executeTrade(cmd.stationId, commodityId, quantity, isBuy);
     if (!result.success) {
       return { tradeResult: result };
     }
 
-    // Update credits and cargo
+    // Update credits and cargo using result.quantity (the actual traded amount)
     if (isBuy) {
       this.playerCredits.set(cmd.shipId, credits - result.totalPrice);
       // Update cost basis (weighted average)
       const oldQty = cargo[commodityId] ?? 0;
       const oldAvg = costBasis[commodityId] ?? 0;
-      const newAvg = (oldAvg * oldQty + result.unitPrice * cmd.quantity) / (oldQty + cmd.quantity);
+      const newAvg = (oldAvg * oldQty + result.unitPrice * result.quantity) / (oldQty + result.quantity);
       costBasis[commodityId] = newAvg;
-      cargo[commodityId] = oldQty + cmd.quantity;
+      cargo[commodityId] = oldQty + result.quantity;
     } else {
       this.playerCredits.set(cmd.shipId, credits + result.totalPrice);
-      cargo[commodityId] = (cargo[commodityId] ?? 0) - cmd.quantity;
+      cargo[commodityId] = (cargo[commodityId] ?? 0) - result.quantity;
       if (cargo[commodityId]! <= 0) {
         delete cargo[commodityId];
         delete costBasis[commodityId];
@@ -545,8 +555,23 @@ export class GameServer {
     this.shipCargo.set(cmd.shipId, cargo);
     this.playerCostBasis.set(cmd.shipId, costBasis);
 
-    // Broadcast market update to subscribers
-    this.broadcastMarketUpdate(sysIndex, cmd.stationId);
+    // Prices update on tick, not on trade — no broadcast here
+
+    logTrade({
+      wallTime: new Date().toISOString(),
+      gameTime: this.gameTime,
+      shipId: cmd.shipId,
+      stationId: cmd.stationId,
+      action: isBuy ? 'BUY' : 'SELL',
+      commodityId,
+      quantity: result.quantity,
+      unitPrice: result.unitPrice,
+      totalPrice: result.totalPrice,
+      avgCostBasis: costBasis[commodityId] ?? 0,
+      creditsAfter: this.playerCredits.get(cmd.shipId) ?? 0,
+      cargoMassAfter: this.getCargoMass(cmd.shipId),
+      maxCargo: DARTER_MASS.maxCargo,
+    });
 
     return { tradeResult: result };
   }
@@ -723,13 +748,16 @@ export class GameServer {
       this.tickSubsystems(gameDt * 20);
     }
 
-    // Economy tick every game-hour
-    this.economyTickAccumulator += gameDt;
-    if (this.economyTickAccumulator >= GameServer.ECONOMY_TICK_INTERVAL) {
-      const hours = this.economyTickAccumulator / 3600;
-      this.economyTickAccumulator = 0;
+    // Economy tick on wall-clock interval (30s)
+    const nowMs = Date.now();
+    if (nowMs - this.lastEconomyTickWallMs >= GameServer.ECONOMY_TICK_WALL_MS) {
+      const elapsedGameHours = gameDt / 3600; // approximate: use current tick's dt
+      // For more accuracy, compute from actual game-time elapsed since last economy tick
+      const wallElapsed = (nowMs - this.lastEconomyTickWallMs) / 1000;
+      const gameHours = (wallElapsed * TIME_COMPRESSION) / 3600;
+      this.lastEconomyTickWallMs = nowMs;
       for (const [sysIndex, economy] of this.economyPerSystem) {
-        economy.tick(hours);
+        economy.tick(gameHours > 0 ? gameHours : elapsedGameHours);
         // Broadcast market updates to subscribers
         this.broadcastEconomyUpdates(sysIndex);
       }

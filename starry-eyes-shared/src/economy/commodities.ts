@@ -23,6 +23,15 @@ export const COMMODITY_DEFS: Record<CommodityId, CommodityDef> = {
 
 export const ALL_COMMODITY_IDS = Object.keys(COMMODITY_DEFS) as CommodityId[];
 
+// ── Economy Constants ─────────────────────────────────────────────────
+
+export const RESERVE_HOURS = 6;           // hours of production held as reserve
+export const SPREAD_MARGIN = 0.15;        // 15% bid/ask spread
+export const PRICE_SMOOTHING = 0.3;       // 30% toward new value per tick
+export const PRICE_FLOOR = 0.1;           // 10% of base price minimum
+export const PRICE_CEILING = 10.0;        // 10x base price maximum
+export const IMPORT_STOCKPILE_MULTIPLIER = 2.0; // max import stockpile = target * this
+
 // ── Manufacturing Recipes ────────────────────────────────────────────
 
 export const RECIPES: Recipe[] = [
@@ -62,6 +71,8 @@ export const STATION_ARCHETYPE_DEFS: Record<StationArchetype, StationArchetypeDe
       extraction('silicates', 'low', 600),
     ],
     consumptionProfile: { food: 5, water: 8, machine_parts: 1 },
+    exports: ['common_metals', 'rare_metals', 'silicates'],
+    imports: ['food', 'water', 'machine_parts'],
     basePopulation: 50,
     populationCap: 200,
   },
@@ -73,6 +84,8 @@ export const STATION_ARCHETYPE_DEFS: Record<StationArchetype, StationArchetypeDe
       manufacturing(findRecipe('pharmaceuticals'), 'low', 200),
     ],
     consumptionProfile: { water: 15, machine_parts: 2, electronics: 1 },
+    exports: ['food', 'pharmaceuticals'],
+    imports: ['water', 'machine_parts', 'electronics'],
     basePopulation: 500,
     populationCap: 5000,
   },
@@ -84,6 +97,8 @@ export const STATION_ARCHETYPE_DEFS: Record<StationArchetype, StationArchetypeDe
       manufacturing(findRecipe('fuel'), 'low', 500),
     ],
     consumptionProfile: { food: 8, machine_parts: 1 },
+    exports: ['water', 'fuel'],
+    imports: ['food', 'machine_parts'],
     basePopulation: 80,
     populationCap: 300,
   },
@@ -95,6 +110,8 @@ export const STATION_ARCHETYPE_DEFS: Record<StationArchetype, StationArchetypeDe
       manufacturing(findRecipe('composites'), 'low', 300),
     ],
     consumptionProfile: { food: 12, water: 10, fuel: 5, machine_parts: 3, electronics: 2 },
+    exports: ['weapons', 'composites'],
+    imports: ['food', 'water', 'fuel', 'machine_parts', 'electronics'],
     basePopulation: 200,
     populationCap: 1000,
   },
@@ -106,6 +123,8 @@ export const STATION_ARCHETYPE_DEFS: Record<StationArchetype, StationArchetypeDe
       manufacturing(findRecipe('machine_parts'), 'high', 500),
     ],
     consumptionProfile: { food: 10, water: 8, common_metals: 10, rare_metals: 3, electronics: 5 },
+    exports: ['ship_components', 'machine_parts'],
+    imports: ['food', 'water', 'common_metals', 'rare_metals', 'electronics'],
     basePopulation: 300,
     populationCap: 2000,
   },
@@ -117,6 +136,8 @@ export const STATION_ARCHETYPE_DEFS: Record<StationArchetype, StationArchetypeDe
       manufacturing(findRecipe('electronics'), 'low', 300),
     ],
     consumptionProfile: { food: 8, water: 6, common_metals: 8, machine_parts: 2 },
+    exports: ['weapons', 'electronics'],
+    imports: ['food', 'water', 'common_metals', 'machine_parts'],
     basePopulation: 150,
     populationCap: 800,
   },

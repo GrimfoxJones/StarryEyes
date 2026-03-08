@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { SystemSnapshot, Destination, SubsystemSnapshot, MarketListing, CargoManifest } from '@starryeyes/shared';
+import type { SystemSnapshot, Destination, SubsystemSnapshot, MarketListing, CargoManifest, BodyTradeSummary } from '@starryeyes/shared';
 import type { GateConnectionInfo } from '@starryeyes/shared';
 import type { ISimulationBridge } from '../../bridge.ts';
 import { TAB_DEFAULTS } from './left-panel/tabConfig.ts';
@@ -102,6 +102,10 @@ interface GameState {
   credits: number;
   costBasis: Partial<Record<string, number>>;
   setCargoManifest: (cargo: CargoManifest, cargoMass: number, maxCargo: number, credits?: number, costBasis?: Partial<Record<string, number>>) => void;
+
+  // Trade summaries (for body popups)
+  tradeSummaries: BodyTradeSummary[];
+  setTradeSummaries: (summaries: BodyTradeSummary[]) => void;
 }
 
 export const useGameStore = create<GameState>((set) => ({
@@ -183,7 +187,7 @@ export const useGameStore = create<GameState>((set) => ({
   clearMarketListings: () => set({ marketListings: null }),
   cargoManifest: null,
   cargoMass: 0,
-  maxCargo: 40000,
+  maxCargo: 8000,
   credits: 0,
   costBasis: {},
   setCargoManifest: (cargo, cargoMass, maxCargo, credits, costBasis) => set({
@@ -193,4 +197,8 @@ export const useGameStore = create<GameState>((set) => ({
     ...(credits !== undefined ? { credits } : {}),
     ...(costBasis !== undefined ? { costBasis } : {}),
   }),
+
+  // Trade summaries
+  tradeSummaries: [],
+  setTradeSummaries: (summaries) => set({ tradeSummaries: summaries }),
 }));

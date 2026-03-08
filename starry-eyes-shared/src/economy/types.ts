@@ -48,6 +48,10 @@ export interface FacilityDef {
   efficiencyTier: 'low' | 'high';
 }
 
+// ── Commodity Roles ─────────────────────────────────────────────────
+
+export type CommodityRole = 'export' | 'import';
+
 // ── Station Archetypes ──────────────────────────────────────────────
 
 export type StationArchetype =
@@ -63,6 +67,8 @@ export interface StationArchetypeDef {
   name: string;
   facilities: FacilityDef[];
   consumptionProfile: Partial<Record<CommodityId, number>>;
+  exports: CommodityId[];
+  imports: CommodityId[];
   basePopulation: number;
   populationCap: number;
 }
@@ -74,7 +80,10 @@ export interface StationEconomyState {
   archetype: StationArchetype;
   stockpiles: Record<CommodityId, number>;
   targets: Record<CommodityId, number>;
-  prices: Record<CommodityId, number>;
+  reserves: Record<CommodityId, number>;
+  roles: Partial<Record<CommodityId, CommodityRole>>;
+  bidPrices: Record<CommodityId, number>;
+  askPrices: Record<CommodityId, number>;
   population: number;
   surfacePopulation: number;
   supplyScore: number;
@@ -85,11 +94,34 @@ export interface StationEconomyState {
 export interface MarketListing {
   commodityId: CommodityId;
   name: string;
+  role: CommodityRole;
   stockpile: number;
   target: number;
-  price: number;
+  available: number;        // availableForSale for exports, remaining capacity for imports
+  price: number;            // askPrice for exports, bidPrice for imports
   basePrice: number;
+  systemAvgPrice: number;   // system average for comparison
   trend: 'rising' | 'falling' | 'stable';
+  outOfStock: boolean;      // true if export with 0 available
+  fullyStocked: boolean;    // true if import at max capacity
+}
+
+// ── System Average Prices ───────────────────────────────────────────
+
+export interface SystemAverages {
+  [commodityId: string]: {
+    avgAskPrice: number | null;
+    avgBidPrice: number | null;
+  };
+}
+
+// ── Trade Summary (for body popups) ─────────────────────────────────
+
+export interface BodyTradeSummary {
+  bodyId: string;
+  stationName: string;
+  imports: { commodityId: string; name: string; demandLevel: 0 | 1 | 2 | 3 }[];
+  exports: { commodityId: string; name: string; outOfStock: boolean }[];
 }
 
 // ── Cargo & Trade ───────────────────────────────────────────────────

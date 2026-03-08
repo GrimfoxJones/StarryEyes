@@ -55,6 +55,7 @@ export class RemoteBridge implements ISimulationBridge {
   private reconnectDelay = 1000;
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   private heartbeatIntervalMs: number;
+  private tradeSummaryTimer: ReturnType<typeof setInterval> | null = null;
   private soiTable: SOIEntry[] = [];
   private _soiParentId = 'sol'; // default; updated after connect
   private starInfoMap = new Map<string, StarInfo>();
@@ -137,9 +138,16 @@ export class RemoteBridge implements ISimulationBridge {
 
     // 5. Start heartbeat sync
     this.startHeartbeat();
+
+    // 6. Start trade summary polling (30s to match economy tick)
+    this.startTradeSummaryPolling();
   }
 
   disconnect(): void {
+    if (this.tradeSummaryTimer) {
+      clearInterval(this.tradeSummaryTimer);
+      this.tradeSummaryTimer = null;
+    }
     if (this.heartbeatTimer) {
       clearInterval(this.heartbeatTimer);
       this.heartbeatTimer = null;
@@ -279,6 +287,25 @@ export class RemoteBridge implements ISimulationBridge {
     } catch {
       return { success: false, error: 'Network error' };
     }
+  }
+
+  async fetchTradeSummaries(): Promise<void> {
+    try {
+      const res = await fetch(`${this.serverUrl}/api/economy/trade-summary`, {
+        headers: { 'Authorization': `Bearer ${this.sessionToken}` },
+      });
+      if (res.ok) {
+        const data = await res.json() as { summaries: import('@starryeyes/shared').BodyTradeSummary[] };
+        useGameStore.getState().setTradeSummaries(data.summaries);
+      }
+    } catch { /* ignore */ }
+  }
+
+  private startTradeSummaryPolling(): void {
+    // Initial fetch
+    this.fetchTradeSummaries();
+    // Poll every 30s to match economy tick
+    this.tradeSummaryTimer = setInterval(() => this.fetchTradeSummaries(), 30000);
   }
 
   private wsSend(msg: unknown): void {

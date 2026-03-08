@@ -2,16 +2,23 @@ import type {
   GeneratedSystem,
   StationData,
   CommodityId,
+  CommodityRole,
   StationEconomyState,
   MarketListing,
   TradeResult,
   StationArchetype,
+  SystemAverages,
+  BodyTradeSummary,
 } from '@starryeyes/shared';
 import {
   COMMODITY_DEFS,
   ALL_COMMODITY_IDS,
   STATION_ARCHETYPE_DEFS,
-  computePrice,
+  RESERVE_HOURS,
+  PRICE_SMOOTHING,
+  IMPORT_STOCKPILE_MULTIPLIER,
+  computeAskPrice,
+  computeBidPrice,
   computeSunlightFactor,
   initialStockpileFraction,
   computeSettlement,
@@ -29,13 +36,13 @@ function emptyPrices(): Record<CommodityId, number> {
   return p;
 }
 
-/** bodyId → StationEconomyState */
+/** bodyId -> StationEconomyState */
 export class EconomySimulator {
   private states: Map<string, StationEconomyState> = new Map();
-  /** bodyId → StationData */
   private stationMap: Record<string, StationData>;
   private system: GeneratedSystem;
   private prevStockpiles: Map<string, Record<CommodityId, number>> = new Map();
+  private systemAverages: SystemAverages = {};
 
   constructor(stations: Record<string, StationData>, system: GeneratedSystem, systemIndex: number) {
     this.stationMap = stations;
@@ -51,23 +58,50 @@ export class EconomySimulator {
 
       const stockpiles = emptyStockpiles();
       const targets = emptyStockpiles();
+      const reserves = emptyStockpiles();
+      const roles: Partial<Record<CommodityId, CommodityRole>> = {};
 
+      // Set roles from archetype
+      for (const id of archetypeDef.exports) roles[id] = 'export';
+      for (const id of archetypeDef.imports) roles[id] = 'import';
+
+      // Set targets: consumption profile * 24 for imports, facility storage cap for exports
       for (const [cid, rate] of Object.entries(archetypeDef.consumptionProfile)) {
         targets[cid as CommodityId] = (rate as number) * 24;
       }
-
       for (const facility of archetypeDef.facilities) {
         targets[facility.commodity] = Math.max(targets[facility.commodity], facility.storageCap);
       }
 
+      // Compute reserves for exports based on production rate
+      for (const facility of archetypeDef.facilities) {
+        if (roles[facility.commodity] === 'export') {
+          const rate = facility.type === 'extraction'
+            ? (facility.efficiencyTier === 'high' ? 20 : 10)
+            : (facility.recipe
+              ? facility.efficiencyTier === 'high'
+                ? facility.recipe.outputPerHour * 1.5
+                : facility.recipe.outputPerHour
+              : 0);
+          reserves[facility.commodity] = Math.max(reserves[facility.commodity], rate * RESERVE_HOURS);
+        }
+      }
+
+      // Initialize stockpiles
       for (const id of ALL_COMMODITY_IDS) {
         stockpiles[id] = targets[id] * fillFraction;
       }
 
-      const prices = emptyPrices();
+      // Initialize prices
+      const bidPrices = emptyPrices();
+      const askPrices = emptyPrices();
       for (const id of ALL_COMMODITY_IDS) {
-        if (targets[id] > 0) {
-          prices[id] = computePrice(COMMODITY_DEFS[id].basePrice, stockpiles[id], targets[id]);
+        const base = COMMODITY_DEFS[id].basePrice;
+        if (roles[id] === 'export') {
+          const available = Math.max(0, stockpiles[id] - reserves[id]);
+          askPrices[id] = computeAskPrice(base, targets[id] || 1, available || 1);
+        } else if (roles[id] === 'import') {
+          bidPrices[id] = computeBidPrice(base, targets[id] || 1, stockpiles[id] || 1);
         }
       }
 
@@ -76,7 +110,10 @@ export class EconomySimulator {
         archetype,
         stockpiles,
         targets,
-        prices,
+        reserves,
+        roles,
+        bidPrices,
+        askPrices,
         population: station.initialPopulation,
         surfacePopulation: station.surfacePopulation ?? 0,
         supplyScore: fillFraction,
@@ -85,6 +122,9 @@ export class EconomySimulator {
       this.states.set(bodyId, state);
       this.prevStockpiles.set(bodyId, { ...stockpiles });
     }
+
+    // Compute initial system averages
+    this.updateSystemAverages();
   }
 
   tick(gameHoursDelta: number): void {
@@ -180,16 +220,54 @@ export class EconomySimulator {
       const popDrift = (targetPop - state.population) * 0.01 * gameHoursDelta;
       state.population = Math.max(archetypeDef.basePopulation * 0.5, state.population + popDrift);
 
-      // 8. Price update
+      // 8. Price update with smoothing (only on tick, not on trade)
       for (const id of ALL_COMMODITY_IDS) {
-        if (state.targets[id] > 0) {
-          state.prices[id] = computePrice(COMMODITY_DEFS[id].basePrice, state.stockpiles[id], state.targets[id]);
+        const base = COMMODITY_DEFS[id].basePrice;
+        if (state.roles[id] === 'export') {
+          const available = Math.max(0, state.stockpiles[id] - state.reserves[id]);
+          const rawAsk = computeAskPrice(base, state.targets[id] || 1, available || 1);
+          state.askPrices[id] += PRICE_SMOOTHING * (rawAsk - state.askPrices[id]);
+        } else if (state.roles[id] === 'import') {
+          const rawBid = computeBidPrice(base, state.targets[id] || 1, state.stockpiles[id] || 1);
+          state.bidPrices[id] += PRICE_SMOOTHING * (rawBid - state.bidPrices[id]);
         }
       }
     }
+
+    // Update system-wide averages
+    this.updateSystemAverages();
   }
 
-  /** Check if a body has a station */
+  private updateSystemAverages(): void {
+    const avgData: Record<string, { askTotal: number; askCount: number; bidTotal: number; bidCount: number }> = {};
+
+    for (const state of this.states.values()) {
+      for (const id of ALL_COMMODITY_IDS) {
+        if (!avgData[id]) avgData[id] = { askTotal: 0, askCount: 0, bidTotal: 0, bidCount: 0 };
+        if (state.roles[id] === 'export') {
+          avgData[id].askTotal += state.askPrices[id];
+          avgData[id].askCount++;
+        } else if (state.roles[id] === 'import') {
+          avgData[id].bidTotal += state.bidPrices[id];
+          avgData[id].bidCount++;
+        }
+      }
+    }
+
+    const averages: SystemAverages = {};
+    for (const [id, data] of Object.entries(avgData)) {
+      averages[id] = {
+        avgAskPrice: data.askCount > 0 ? data.askTotal / data.askCount : null,
+        avgBidPrice: data.bidCount > 0 ? data.bidTotal / data.bidCount : null,
+      };
+    }
+    this.systemAverages = averages;
+  }
+
+  getSystemAverages(): SystemAverages {
+    return this.systemAverages;
+  }
+
   hasStation(bodyId: string): boolean {
     return this.states.has(bodyId);
   }
@@ -200,9 +278,14 @@ export class EconomySimulator {
 
     const prev = this.prevStockpiles.get(bodyId);
     const listings: MarketListing[] = [];
+    const archetype = state.archetype;
+    const archetypeDef = STATION_ARCHETYPE_DEFS[archetype];
+    if (!archetypeDef) return [];
 
+    // Only list commodities with a role (exports + imports)
     for (const id of ALL_COMMODITY_IDS) {
-      if (state.targets[id] <= 0 && state.stockpiles[id] <= 0) continue;
+      const role = state.roles[id];
+      if (!role) continue;
 
       let trend: 'rising' | 'falling' | 'stable' = 'stable';
       if (prev) {
@@ -211,18 +294,79 @@ export class EconomySimulator {
         else if (diff < -0.5) trend = 'rising';
       }
 
+      let available: number;
+      let price: number;
+      let outOfStock = false;
+      let fullyStocked = false;
+
+      if (role === 'export') {
+        available = Math.max(0, Math.round(state.stockpiles[id] - state.reserves[id]));
+        price = state.askPrices[id];
+        outOfStock = available <= 0;
+      } else {
+        const maxImport = state.targets[id] * IMPORT_STOCKPILE_MULTIPLIER;
+        available = Math.max(0, Math.round(maxImport - state.stockpiles[id]));
+        price = state.bidPrices[id];
+        fullyStocked = available <= 0;
+      }
+
+      const sysAvg = this.systemAverages[id];
+      const systemAvgPrice = role === 'export'
+        ? (sysAvg?.avgAskPrice ?? price)
+        : (sysAvg?.avgBidPrice ?? price);
+
       listings.push({
         commodityId: id,
         name: COMMODITY_DEFS[id].name,
+        role,
         stockpile: Math.round(state.stockpiles[id]),
         target: Math.round(state.targets[id]),
-        price: Math.round(state.prices[id] * 100) / 100,
+        available,
+        price: Math.round(price * 100) / 100,
         basePrice: COMMODITY_DEFS[id].basePrice,
+        systemAvgPrice: Math.round(systemAvgPrice * 100) / 100,
         trend,
+        outOfStock,
+        fullyStocked,
       });
     }
 
     return listings;
+  }
+
+  getTradeSummaries(): BodyTradeSummary[] {
+    const summaries: BodyTradeSummary[] = [];
+
+    for (const [bodyId, state] of this.states) {
+      const station = this.stationMap[bodyId];
+      if (!station) continue;
+
+      const imports: BodyTradeSummary['imports'] = [];
+      const exports: BodyTradeSummary['exports'] = [];
+
+      for (const id of ALL_COMMODITY_IDS) {
+        const role = state.roles[id];
+        if (!role) continue;
+
+        if (role === 'import') {
+          const target = state.targets[id];
+          const ratio = target > 0 ? state.stockpiles[id] / target : 1;
+          let demandLevel: 0 | 1 | 2 | 3;
+          if (ratio < 0.25) demandLevel = 3;
+          else if (ratio < 0.50) demandLevel = 2;
+          else if (ratio < 0.75) demandLevel = 1;
+          else demandLevel = 0;
+          imports.push({ commodityId: id, name: COMMODITY_DEFS[id].name, demandLevel });
+        } else {
+          const available = Math.max(0, state.stockpiles[id] - state.reserves[id]);
+          exports.push({ commodityId: id, name: COMMODITY_DEFS[id].name, outOfStock: available <= 0 });
+        }
+      }
+
+      summaries.push({ bodyId, stationName: station.name, imports, exports });
+    }
+
+    return summaries;
   }
 
   executeTrade(bodyId: string, commodityId: CommodityId, quantity: number, isBuy: boolean): TradeResult {
@@ -231,28 +375,49 @@ export class EconomySimulator {
       return { success: false, commodityId, quantity: 0, unitPrice: 0, totalPrice: 0, error: 'No station at this body' };
     }
 
-    const unitPrice = state.prices[commodityId] ?? COMMODITY_DEFS[commodityId].basePrice;
+    const role = state.roles[commodityId];
+    const commodityName = COMMODITY_DEFS[commodityId].name;
 
     if (isBuy) {
-      if (state.stockpiles[commodityId] < quantity) {
-        return { success: false, commodityId, quantity: 0, unitPrice, totalPrice: 0, error: 'Insufficient stock' };
+      // Player buying from station — must be an export
+      if (role !== 'export') {
+        return { success: false, commodityId, quantity: 0, unitPrice: 0, totalPrice: 0, error: `This station does not sell ${commodityName}` };
       }
-      state.stockpiles[commodityId] -= quantity;
+
+      const available = Math.max(0, state.stockpiles[commodityId] - state.reserves[commodityId]);
+      const actualQty = Math.min(quantity, Math.floor(available));
+      if (actualQty <= 0) {
+        return { success: false, commodityId, quantity: 0, unitPrice: 0, totalPrice: 0, error: 'Out of stock' };
+      }
+
+      const unitPrice = state.askPrices[commodityId];
+      state.stockpiles[commodityId] -= actualQty;
+      // Prices NOT updated here — only on tick
+
+      return { success: true, commodityId, quantity: actualQty, unitPrice, totalPrice: unitPrice * actualQty };
     } else {
-      state.stockpiles[commodityId] += quantity;
-    }
+      // Player selling to station — must be an import
+      if (role !== 'import') {
+        return { success: false, commodityId, quantity: 0, unitPrice: 0, totalPrice: 0, error: `This station does not buy ${commodityName}` };
+      }
 
-    if (state.targets[commodityId] > 0) {
-      state.prices[commodityId] = computePrice(COMMODITY_DEFS[commodityId].basePrice, state.stockpiles[commodityId], state.targets[commodityId]);
-    }
+      const maxImport = state.targets[commodityId] * IMPORT_STOCKPILE_MULTIPLIER;
+      const remaining = maxImport - state.stockpiles[commodityId];
+      if (remaining <= 0) {
+        return { success: false, commodityId, quantity: 0, unitPrice: 0, totalPrice: 0, error: `${commodityName} fully stocked` };
+      }
 
-    return {
-      success: true,
-      commodityId,
-      quantity,
-      unitPrice,
-      totalPrice: unitPrice * quantity,
-    };
+      const actualQty = Math.min(quantity, Math.floor(remaining));
+      if (actualQty <= 0) {
+        return { success: false, commodityId, quantity: 0, unitPrice: 0, totalPrice: 0, error: `${commodityName} fully stocked` };
+      }
+
+      const unitPrice = state.bidPrices[commodityId];
+      state.stockpiles[commodityId] += actualQty;
+      // Prices NOT updated here — only on tick
+
+      return { success: true, commodityId, quantity: actualQty, unitPrice, totalPrice: unitPrice * actualQty };
+    }
   }
 
   getState(bodyId: string): StationEconomyState | undefined {
